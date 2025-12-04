@@ -14,6 +14,8 @@ class ProductPage extends StatefulWidget {
 
 class _ProductPageState extends State<ProductPage> {
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _searchCtrl = TextEditingController();
+  String? _filterName;
 
   @override
   void initState() {
@@ -22,6 +24,12 @@ class _ProductPageState extends State<ProductPage> {
     ProductService.init().then((_) {
       setState(() {});
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _openAddEditDialog({Product? product}) async {
@@ -273,6 +281,55 @@ class _ProductPageState extends State<ProductPage> {
     );
   }
 
+  void _showProductDetails(Product p) {
+    showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(p.name),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (p.images.isNotEmpty)
+                SizedBox(
+                  height: 140,
+                  width: double.infinity,
+                  child: Image.file(File(p.images.first), fit: BoxFit.cover),
+                ),
+              const SizedBox(height: 8),
+              Text('Description: ${p.description}'),
+              const SizedBox(height: 6),
+              Text('Price: LKR ${p.price.toStringAsFixed(2)}'),
+              const SizedBox(height: 6),
+              Text('Cost: LKR ${p.cost.toStringAsFixed(2)}'),
+              const SizedBox(height: 6),
+              Text('Sold / month: ${p.soldPerMonth.toStringAsFixed(2)} kg'),
+              const SizedBox(height: 6),
+              Text('Bought / month: ${p.boughtPerMonth.toStringAsFixed(2)} kg'),
+              const SizedBox(height: 6),
+              Text('Current stock: ${p.currentStock.toStringAsFixed(2)} kg'),
+              const SizedBox(height: 6),
+              Text('Created: ${p.createdAt.toLocal()}'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(),
+            child: const Text('Close'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(c).pop();
+              _openAddEditDialog(product: p);
+            },
+            child: const Text('Edit'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSummaryCard() {
     final totalSell = ProductService.totalSelling();
     final totalBuy = ProductService.totalBuying();
@@ -379,18 +436,51 @@ class _ProductPageState extends State<ProductPage> {
   @override
   Widget build(BuildContext context) {
     final products = ProductService.getProducts();
+    final displayedProducts = (_filterName == null || _filterName!.isEmpty)
+        ? products
+        : products
+              .where(
+                (p) =>
+                    p.name.toLowerCase().contains(_filterName!.toLowerCase()),
+              )
+              .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Products')),
       body: Column(
         children: [
           _buildSummaryCard(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Search products by name',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setState(() => _filterName = v.trim()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _filterName = null);
+                  },
+                  icon: const Icon(Icons.clear),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: products.length,
+              itemCount: displayedProducts.length,
               itemBuilder: (context, i) {
-                final p = products[i];
+                final p = displayedProducts[i];
                 return Card(
                   child: ListTile(
                     leading: p.images.isNotEmpty
@@ -412,9 +502,17 @@ class _ProductPageState extends State<ProductPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     isThreeLine: true,
+                    onTap: () => _showProductDetails(p),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.remove_red_eye,
+                            color: Colors.grey,
+                          ),
+                          onPressed: () => _showProductDetails(p),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit, color: Colors.blue),
                           onPressed: () => _openAddEditDialog(product: p),
