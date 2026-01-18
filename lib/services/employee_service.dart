@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Employee {
@@ -55,7 +56,9 @@ class Employee {
   };
 
   factory Employee.fromJson(Map<String, dynamic> m) => Employee(
-    id: m['id'] as String,
+    id:
+        m['id'] as String? ??
+        (m['_id'] as String? ?? ''), // Handling mongo _id vs id
     firstName: m['firstName'] as String,
     lastName: m['lastName'] as String,
     dob: DateTime.parse(m['dob'] as String),
@@ -72,59 +75,30 @@ class Employee {
 
 class EmployeeService {
   static final List<Employee> _employees = [];
-  static const String _storageKey = 'employees_v1';
+  // For Windows, localhost is often accessible but sometimes requires 127.0.0.1
+  // Android Emulator requires 10.0.2.2
+  static const String _baseUrl = 'http://localhost:3000/api/employees';
 
   static Future<void> init() async {
+    // In HTTP version, init might just verify connection or fetch initial list
+    await fetchEmployees();
+    await _loadSalaryHistory();
+  }
+
+  static Future<void> fetchEmployees() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
-      // load last salary paid date if present
-      final lastPaid = prefs.getString('salary_last_paid');
-      if (lastPaid != null && lastPaid.isNotEmpty) {
-        try {
-          _lastSalaryPaid = DateTime.parse(lastPaid);
-        } catch (_) {}
-      }
-      // load salary payments history
-      final paymentsJson = prefs.getString('salary_payments');
-      if (paymentsJson != null && paymentsJson.isNotEmpty) {
-        try {
-          final List<dynamic> list = jsonDecode(paymentsJson);
-          _salaryPayments.clear();
-          for (final p in list) {
-            try {
-              final map = p as Map<String, dynamic>;
-              _salaryPayments.add({
-                'date': DateTime.parse(map['date'] as String),
-                'total': (map['total'] as num).toDouble(),
-              });
-            } catch (_) {}
-          }
-        } catch (_) {}
-      }
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        final List<dynamic> list = jsonDecode(jsonStr);
+      final response = await http.get(Uri.parse(_baseUrl));
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body);
         _employees.clear();
         for (final e in list) {
           try {
             _employees.add(Employee.fromJson(e as Map<String, dynamic>));
-          } catch (_) {
-            // ignore malformed entries
-          }
+          } catch (_) {}
         }
       }
-    } catch (_) {
-      // ignore storage errors
-    }
-  }
-
-  static Future<void> _saveToStorage() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonStr = jsonEncode(_employees.map((e) => e.toJson()).toList());
-      await prefs.setString(_storageKey, jsonStr);
-    } catch (_) {
-      // ignore save errors
+    } catch (e) {
+      print('Error fetching employees: $e');
     }
   }
 
@@ -136,6 +110,35 @@ class EmployeeService {
       (m) => {'date': m['date'] as DateTime, 'total': m['total'] as double},
     ),
   );
+
+  static DateTime? _lastSalaryPaid;
+
+  static DateTime? getLastSalaryPaid() => _lastSalaryPaid;
+
+  static Future<void> _loadSalaryHistory() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lastPaid = prefs.getString('salary_last_paid');
+      if (lastPaid != null && lastPaid.isNotEmpty) {
+        try {
+          _lastSalaryPaid = DateTime.parse(lastPaid);
+        } catch (_) {}
+      }
+      final paymentsJson = prefs.getString('salary_payments');
+      if (paymentsJson != null && paymentsJson.isNotEmpty) {
+        try {
+          final List<dynamic> list = jsonDecode(paymentsJson);
+          _salaryPayments.clear();
+          for (final p in list) {
+            _salaryPayments.add({
+              'date': DateTime.parse(p['date']),
+              'total': (p['total'] as num).toDouble(),
+            });
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 
   static Future<void> _persistSalaryPayments() async {
     try {
@@ -154,10 +157,6 @@ class EmployeeService {
     } catch (_) {}
   }
 
-  static DateTime? _lastSalaryPaid;
-
-  static DateTime? getLastSalaryPaid() => _lastSalaryPaid;
-
   static Future<void> _setLastSalaryPaid(DateTime dt) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -173,20 +172,47 @@ class EmployeeService {
 
   static List<Employee> getEmployees() => List.unmodifiable(_employees);
 
-  static void addEmployee(Employee e) {
-    _employees.insert(0, e);
-    _saveToStorage();
+  static Future<void> addEmployee(Employee e) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_baseUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(e.toJson()),
+      );
+      if (response.statusCode == 201) {
+        // Refresh local list or just insert
+        _employees.insert(0, e);
+      }
+    } catch (e) {
+      debugPrint('Error adding employee: $e');
+    }
   }
 
-  static void updateEmployee(String id, Employee updated) {
-    final idx = _employees.indexWhere((e) => e.id == id);
-    if (idx != -1) _employees[idx] = updated;
-    _saveToStorage();
+  static Future<void> updateEmployee(String id, Employee updated) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$_baseUrl/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(updated.toJson()),
+      );
+      if (response.statusCode == 200) {
+        final idx = _employees.indexWhere((e) => e.id == id);
+        if (idx != -1) _employees[idx] = updated;
+      }
+    } catch (e) {
+      debugPrint('Error updating employee: $e');
+    }
   }
 
-  static void deleteEmployee(String id) {
-    _employees.removeWhere((e) => e.id == id);
-    _saveToStorage();
+  static Future<void> deleteEmployee(String id) async {
+    try {
+      final response = await http.delete(Uri.parse('$_baseUrl/$id'));
+      if (response.statusCode == 200) {
+        _employees.removeWhere((e) => e.id == id);
+      }
+    } catch (e) {
+      debugPrint('Error deleting employee: $e');
+    }
   }
 
   static Employee create({

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 
 import '../services/employee_service.dart';
+import 'spreadsheet_page.dart';
 
 // Upper-case formatter (top-level so it can be reused safely).
 class _UpperCaseTextFormatter extends TextInputFormatter {
@@ -376,7 +377,7 @@ class _EmployeePageState extends State<EmployeePage> {
                   child: const Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final idValue = idCtrl.text.trim().toUpperCase();
                     final firstName = firstNameCtrl.text.trim().toUpperCase();
                     final lastName = lastNameCtrl.text.trim().toUpperCase();
@@ -481,7 +482,10 @@ class _EmployeePageState extends State<EmployeePage> {
                         accountNo: accountNoCtrl.text.trim(),
                         accountHolder: accountHolderCtrl.text.trim(),
                       );
-                      EmployeeService.updateEmployee(employee.id, updated);
+                      await EmployeeService.updateEmployee(
+                        employee.id,
+                        updated,
+                      );
                     } else {
                       final created = EmployeeService.create(
                         id: idValue,
@@ -497,7 +501,7 @@ class _EmployeePageState extends State<EmployeePage> {
                         accountNo: accountNoCtrl.text.trim(),
                         accountHolder: accountHolderCtrl.text.trim(),
                       );
-                      EmployeeService.addEmployee(created);
+                      await EmployeeService.addEmployee(created);
                     }
 
                     setState(() {});
@@ -648,6 +652,15 @@ class _EmployeePageState extends State<EmployeePage> {
       appBar: AppBar(
         title: const Text('Employees'),
         actions: [
+          IconButton(
+            tooltip: 'Spreadsheet View',
+            icon: const Icon(Icons.table_chart),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (c) => const SpreadsheetPage()),
+              );
+            },
+          ),
           IconButton(
             tooltip: 'Pay Salaries',
             icon: const Icon(Icons.payments),

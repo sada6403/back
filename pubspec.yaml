@@ -39,6 +39,8 @@ dependencies:
   intl: ^0.18.0
   pdf: ^3.10.0
   path_provider: ^2.0.11
+  google_fonts: ^6.1.0
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
