@@ -102,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: const Color(0xFF0F172A),
               shape: BoxShape.circle,
               border: Border.all(
-                color: const Color(0xFF0EA5E9).withOpacity(0.5),
+                color: const Color(0xFF0EA5E9).withValues(alpha: 0.5),
               ),
             ),
             child: Icon(icon, color: const Color(0xFF0EA5E9), size: 30),
@@ -161,7 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF0EA5E9).withOpacity(0.2),
+                    color: const Color(0xFF0EA5E9).withValues(alpha: 0.2),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),
@@ -179,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withOpacity(0.15),
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                     blurRadius: 80,
                     spreadRadius: 20,
                   ),
@@ -246,7 +246,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                                color: const Color(
+                                  0xFF0EA5E9,
+                                ).withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 5,
                               ),
@@ -325,10 +327,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             (_isEditing
                                     ? const Color(0xFF10B981)
                                     : const Color(0xFF0EA5E9))
-                                .withOpacity(0.4),
+                                .withValues(alpha: 0.4),
                       ),
                       child: Text(
                         _isEditing ? 'Save Changes' : 'Edit Profile',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Change Password Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        _showChangePasswordDialog();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Color(0xFF6366F1)),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Change Password',
                         style: GoogleFonts.outfit(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -398,6 +426,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showChangePasswordDialog() {
+    final newPassCtrl = TextEditingController();
+    final confirmPassCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text(
+          'Change Password',
+          style: GoogleFonts.outfit(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: newPassCtrl,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'New Password',
+                labelStyle: TextStyle(color: Colors.white70),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: confirmPassCtrl,
+              obscureText: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Confirm Password',
+                labelStyle: TextStyle(color: Colors.white70),
+                enabledBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: Colors.white24),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newPass = newPassCtrl.text;
+              final confirmPass = confirmPassCtrl.text;
+
+              if (newPass.isEmpty || confirmPass.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please fill all fields')),
+                );
+                return;
+              }
+
+              if (newPass != confirmPass) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Passwords do not match')),
+                );
+                return;
+              }
+
+              if (newPass.length < 6) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Password must be at least 6 characters'),
+                  ),
+                );
+                return;
+              }
+
+              // Call API
+              final success = await AuthService.changePassword(newPass);
+
+              if (dialogContext.mounted) {
+                Navigator.pop(dialogContext);
+              }
+
+              if (mounted) {
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Password changed successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to change password'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGlassTextField(
     String label,
     TextEditingController controller,
@@ -410,9 +545,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withOpacity(0.7),
+            color: const Color(0xFF1E293B).withValues(alpha: 0.7),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
           ),
           child: TextField(
             controller: controller,

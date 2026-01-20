@@ -14,6 +14,7 @@ dependencies:
   shared_preferences: ^2.0.15
   intl: ^0.18.0
   pdf: ^3.10.0
+  printing: ^5.11.0
   path_provider: ^2.0.11
   google_fonts: ^6.1.0
   http: ^1.1.0
@@ -38,3 +39,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon.png
+    - assets/nf logo.jpg

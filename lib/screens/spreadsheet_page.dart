@@ -53,7 +53,9 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
   }
 
   void _disposeControllers() {
-    for (var c in _controllers.values) c.dispose();
+    for (var c in _controllers.values) {
+      c.dispose();
+    }
     _controllers.clear();
   }
 
@@ -134,8 +136,9 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
       if (nameCtrl != null) emp.fullName = nameCtrl.text;
       if (emailCtrl != null) emp.email = emailCtrl.text;
       if (phoneCtrl != null) emp.phone = phoneCtrl.text;
-      if (salCtrl != null)
+      if (salCtrl != null) {
         emp.salary = double.tryParse(salCtrl.text) ?? emp.salary;
+      }
       if (bankNameCtrl != null) emp.bankName = bankNameCtrl.text;
       if (bankBranchCtrl != null) emp.bankBranch = bankBranchCtrl.text;
       if (accCtrl != null) emp.accountNo = accCtrl.text;
@@ -181,7 +184,10 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A), // Slate 900
         border: Border(
-          right: BorderSide(color: Colors.white.withOpacity(0.1), width: 1),
+          right: BorderSide(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
         ),
       ),
       child: Text(
@@ -205,8 +211,8 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
       decoration: BoxDecoration(
         color: isOdd ? Colors.grey[50] : Colors.white,
         border: Border(
-          right: BorderSide(color: Colors.grey.withOpacity(0.2)),
-          bottom: BorderSide(color: Colors.grey.withOpacity(0.2)),
+          right: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+          bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
         ),
       ),
       child: content,
@@ -347,12 +353,13 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                                       )
                                       .toList(),
                                   onChanged: (val) {
-                                    if (val != null)
+                                    if (val != null) {
                                       setState(() {
                                         e.role = val;
                                         e.position = val;
                                         _isDirty = true;
                                       });
+                                    }
                                   },
                                   underline: Container(),
                                   isExpanded: true,
@@ -384,11 +391,12 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                                       )
                                       .toList(),
                                   onChanged: (val) {
-                                    if (val != null)
+                                    if (val != null) {
                                       setState(() {
                                         e.branchName = val;
                                         _isDirty = true;
                                       });
+                                    }
                                   },
                                   underline: Container(),
                                   isExpanded: true,
@@ -450,11 +458,12 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                                       firstDate: DateTime(1900),
                                       lastDate: DateTime.now(),
                                     );
-                                    if (d != null)
+                                    if (d != null) {
                                       setState(() {
                                         e.dob = d;
                                         _isDirty = true;
                                       });
+                                    }
                                   },
                                   child: Text(
                                     DateFormat('yyyy-MM-dd').format(e.dob),
@@ -477,11 +486,12 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
                                       firstDate: DateTime(2000),
                                       lastDate: DateTime.now(),
                                     );
-                                    if (d != null)
+                                    if (d != null) {
                                       setState(() {
                                         e.joinedDate = d;
                                         _isDirty = true;
                                       });
+                                    }
                                   },
                                   child: Text(
                                     DateFormat(
@@ -510,13 +520,13 @@ class _SpreadsheetPageState extends State<SpreadsheetPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
                   color: Colors.black12,
                   blurRadius: 10,
-                  offset: const Offset(0, -2),
+                  offset: Offset(0, -2),
                 ),
               ],
             ),

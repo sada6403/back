@@ -48,19 +48,13 @@ class _ProductPageState extends State<ProductPage> {
     final boughtCtrl = TextEditingController(
       text: product != null ? product.boughtPerMonth.toString() : '0',
     );
-    final stockCtrl = TextEditingController(text: '0');
+    final stockCtrl = TextEditingController(
+      text: product != null ? product.currentStock.toString() : '0',
+    );
     List<String> images = List.from(product?.images ?? []);
 
-    // Auto-update stock calculation when sold or bought changes
-    void updateStock() {
-      final sold = double.tryParse(soldCtrl.text.trim()) ?? 0.0;
-      final bought = double.tryParse(boughtCtrl.text.trim()) ?? 0.0;
-      final stock = bought - sold;
-      stockCtrl.text = stock.toStringAsFixed(2);
-    }
-
-    // Initialize stock on load
-    updateStock();
+    // Removed auto-update stock calculation logic to prevent resetting total stock
+    // based on monthly values. Stock is now manually managed.
 
     await showDialog<void>(
       context: context,
@@ -76,8 +70,7 @@ class _ProductPageState extends State<ProductPage> {
               }
             }
 
-            soldCtrl.addListener(updateStock);
-            boughtCtrl.addListener(updateStock);
+            // Listeners removed so stock is not overwritten automatically
 
             return AlertDialog(
               title: Text(isEdit ? 'Edit Product' : 'Add Product'),
@@ -184,11 +177,13 @@ class _ProductPageState extends State<ProductPage> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: stockCtrl,
-                      readOnly: true,
+                      readOnly: false, // Made editable
                       decoration: const InputDecoration(
-                        labelText: 'Available Stock (kg) [Auto-calculated]',
+                        labelText:
+                            'Available Stock (kg)', // Removed [Auto-calculated]
                         border: OutlineInputBorder(),
                       ),
+                      keyboardType: TextInputType.number,
                     ),
                   ],
                 ),
@@ -228,16 +223,8 @@ class _ProductPageState extends State<ProductPage> {
                       );
                       return;
                     }
-                    if (bought < sold) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Total bought must be >= total selling',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
+                    // Removed logic check that forced bought >= sold, as they are independent monthly stats
+                    // and stock is separate.
 
                     if (isEdit) {
                       final updated = Product(
@@ -553,6 +540,7 @@ class _ProductPageState extends State<ProductPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'product_fab',
         onPressed: () => _openAddEditDialog(),
         child: const Icon(Icons.add),
       ),

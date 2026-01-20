@@ -8,10 +8,16 @@ import '../services/auth_service.dart';
 import '../services/product_service.dart';
 import '../services/employee_service.dart';
 import '../services/member_service.dart';
+import '../services/transaction_service.dart';
+import '../models/transaction.dart';
 import 'employee_page.dart';
 import 'members_page.dart';
 import 'product_page.dart';
 import 'profile_screen.dart';
+import 'reports/report_screen.dart';
+import 'messaging/bulk_message_screen.dart';
+import 'settings_screen.dart';
+import 'approvals_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -22,6 +28,27 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
+  List<Transaction> _allTransactions = [];
+
+  // ... (keep existing code)
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    await ProductService.init();
+    await EmployeeService.init();
+    await MemberService.init();
+    final txs = await TransactionService.getTransactions();
+    if (mounted) {
+      setState(() {
+        _allTransactions = txs;
+      });
+    }
+  }
 
   List<int> _monthlyNewMembers() {
     final now = DateTime.now();
@@ -56,20 +83,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return counts;
   }
 
+  // ... (keep existing code)
+
   List<List<double>> _monthlyMemberBuySell() {
     final now = DateTime.now();
     final buy = List<double>.filled(12, 0.0);
     final sell = List<double>.filled(12, 0.0);
-    final members = MemberService.getMembers();
-    for (final m in members) {
-      for (final t in m.transactions) {
-        final dt = t.date;
-        for (int i = 0; i < 12; i++) {
-          final monthDate = DateTime(now.year, now.month - 11 + i, 1);
-          if (dt.year == monthDate.year && dt.month == monthDate.month) {
-            if (t.type == 'buy') buy[i] += t.amount;
-            if (t.type == 'sell') sell[i] += t.amount;
-          }
+
+    for (final t in _allTransactions) {
+      final dt = t.date;
+      for (int i = 0; i < 12; i++) {
+        final monthDate = DateTime(now.year, now.month - 11 + i, 1);
+        if (dt.year == monthDate.year && dt.month == monthDate.month) {
+          if (t.type == 'buy') buy[i] += t.amount;
+          if (t.type == 'sell') sell[i] += t.amount;
         }
       }
     }
@@ -132,6 +159,262 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildQuickActions() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
+                );
+              },
+              icon: const Icon(Icons.send, color: Colors.white),
+              label: const Text('Send Wishes'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ReportScreen()));
+              },
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+              label: const Text('Reports'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ApprovalsScreen()),
+                );
+              },
+              icon: const Icon(Icons.approval, color: Colors.white),
+              label: const Text('Approvals'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[800],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSystemStatus() {
+    return Container(
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.1),
+        border: Border.all(color: Colors.green),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          const SizedBox(width: 8),
+          const Text(
+            'System Online',
+            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+          ),
+          const Spacer(),
+          Text(
+            'Database: Connected',
+            style: TextStyle(color: Colors.green[800], fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlobalSearch() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      child: TextField(
+        decoration: InputDecoration(
+          hintText: 'Search Database (Members, Staff, Products)...',
+          prefixIcon: const Icon(Icons.search),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        ),
+        onSubmitted: (value) {
+          if (value.trim().isEmpty) return;
+          final query = value.trim().toLowerCase();
+
+          final members = MemberService.getMembers()
+              .where(
+                (m) =>
+                    m.name.toLowerCase().contains(query) ||
+                    m.id.toLowerCase().contains(query),
+              )
+              .toList();
+
+          final employees = EmployeeService.getEmployees()
+              .where(
+                (e) =>
+                    e.fullName.toLowerCase().contains(query) ||
+                    e.userId.toLowerCase().contains(query),
+              )
+              .toList();
+
+          final products = ProductService.getProducts()
+              .where((p) => p.name.toLowerCase().contains(query))
+              .toList();
+
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                constraints: const BoxConstraints(maxHeight: 600),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Search Results: "$value"',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (members.isEmpty &&
+                                employees.isEmpty &&
+                                products.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text('No results found.'),
+                              ),
+
+                            if (members.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Text(
+                                  'Members',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                              ...members.map(
+                                (m) => ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.person),
+                                  title: Text(m.name),
+                                  subtitle: Text(m.id),
+                                  trailing: const Icon(
+                                    Icons.visibility,
+                                    size: 16,
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() => _selectedIndex = 3);
+                                  },
+                                ),
+                              ),
+                            ],
+
+                            if (employees.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Text(
+                                  'Staff',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ),
+                              ...employees.map(
+                                (e) => ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.badge),
+                                  title: Text(e.fullName),
+                                  subtitle: Text(e.role),
+                                  trailing: const Icon(
+                                    Icons.visibility,
+                                    size: 16,
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() => _selectedIndex = 2);
+                                  },
+                                ),
+                              ),
+                            ],
+
+                            if (products.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Text(
+                                  'Products',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ),
+                              ...products.map(
+                                (p) => ListTile(
+                                  dense: true,
+                                  leading: const Icon(Icons.inventory_2),
+                                  title: Text(p.name),
+                                  subtitle: Text('LKR ${p.price}'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() => _selectedIndex = 1);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildDashboardAnalytics() {
     final income = ProductService.totalSelling();
     final outcome = ProductService.totalBuying();
@@ -159,6 +442,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return SingleChildScrollView(
       child: Column(
         children: [
+          _buildSystemStatus(),
+          _buildGlobalSearch(),
+          _buildQuickActions(),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             child: Row(
@@ -274,25 +560,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Expanded(
                   child: _cardMetric(
-                    'Employees',
+                    'Staff',
                     '$employeeTotal',
-                    icon: Icons.work,
+                    icon: Icons.people_alt,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: _cardMetric(
-                    'Managers',
-                    '${positionCounts['Manager'] ?? 0}',
-                    icon: Icons.person,
+                    'Branch Managers',
+                    '${positionCounts['Branch Manager'] ?? 0}',
+                    icon: Icons.admin_panel_settings,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: _cardMetric(
-                    'Visitors',
+                    'Field Visitors',
                     '${positionCounts['Field Visitor'] ?? 0}',
-                    icon: Icons.location_on,
+                    icon: Icons.hiking,
                   ),
                 ),
               ],
@@ -308,7 +594,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Employees - New per Month',
+                      'Staff - New per Month',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -452,20 +738,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ];
 
   @override
-  void initState() {
-    super.initState();
-    ProductService.init().then((_) => setState(() {}));
-    EmployeeService.init().then((_) => setState(() {}));
-    MemberService.init().then((_) => setState(() {}));
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final titles = ['Dashboard', 'Products', 'Employees', 'Members'];
+    final titles = ['Dashboard', 'Products', 'Staff Management', 'Members'];
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.black),
         elevation: 1,
         title: Text(
           titles[_selectedIndex],
@@ -473,6 +752,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.blueGrey),
+            tooltip: 'Database Settings',
+            onPressed: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
             child: IconButton(
@@ -505,6 +793,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: _selectedIndex == 0
           ? _buildDashboardAnalytics()
           : IndexedStack(index: _selectedIndex, children: _pages),
@@ -519,7 +808,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.dashboard_outlined),
             activeIcon: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(8),
@@ -531,7 +820,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.inventory_2_outlined),
             activeIcon: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(8),
@@ -543,19 +832,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.work_outline),
             activeIcon: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(8),
               child: const Icon(Icons.work, color: Colors.blue),
             ),
-            label: 'Employees',
+            label: 'Staff',
           ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.group_outlined),
             activeIcon: Container(
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               padding: const EdgeInsets.all(8),
@@ -597,12 +886,24 @@ class AppDrawer extends StatelessWidget {
             ).push(MaterialPageRoute(builder: (_) => const ProductPage())),
           ),
           _buildDrawerItem(
-            text: 'Employees',
+            text: 'Staff Management',
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const EmployeePage())),
           ),
           _buildDrawerItem(text: 'Members', onTap: () {}),
+          _buildDrawerItem(
+            text: 'Reports',
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ReportScreen())),
+          ),
+          _buildDrawerItem(
+            text: 'Send Wishes',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
+            ),
+          ),
           _buildDrawerItem(text: 'Analysis', onTap: () {}),
         ],
       ),

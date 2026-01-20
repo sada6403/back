@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class Employee {
   // Use userId for the functional ID (e.g. MGR-KM-000001)
   String userId;
+  String id; // MongoDB _id
   String fullName;
   String email;
   String phone;
@@ -19,6 +21,10 @@ class Employee {
   String password; // Only for creation payload really, usually not returned
   String status;
 
+  // Field Visitor Specific
+  double targetAmount;
+  String assignedArea;
+
   // Bank details
   String bankName;
   String bankBranch;
@@ -26,7 +32,8 @@ class Employee {
   String accountHolder;
 
   Employee({
-    this.userId = '', // Assigned by backend
+    this.userId = '',
+    this.id = '',
     required this.fullName,
     required this.email,
     required this.phone,
@@ -39,6 +46,8 @@ class Employee {
     required this.joinedDate,
     this.password = '',
     this.status = 'active',
+    this.targetAmount = 0.0,
+    this.assignedArea = '',
     this.bankName = '',
     this.bankBranch = '',
     this.accountNo = '',
@@ -51,48 +60,103 @@ class Employee {
     return now.difference(joinedDate).inDays;
   }
 
-  Map<String, dynamic> toJson() => {
-    'userId': userId,
-    'fullName': fullName,
-    'email': email,
-    'phone': phone,
-    'dob': dob.toIso8601String(),
-    'role': role,
-    'position': position,
-    'salary': salary,
-    'branchName': branchName,
-    'branchId': branchId,
-    'joinedDate': joinedDate.toIso8601String(),
-    'status': status,
-    'bankName': bankName,
-    'bankBranch': bankBranch,
-    'accountNo': accountNo,
-    'accountHolder': accountHolder,
-  };
+  Map<String, dynamic> toJson() {
+    // Determine payload based on role, but standard fields mostly overlap
+    return {
+      if (id.isNotEmpty) '_id': id,
+      'userId': userId,
+      'fullName': fullName,
+      'name': fullName, // Backend expects 'name' for some models
+      'email': email,
+      'phone': phone,
+      'dob': dob.toIso8601String(),
+      'role': role == 'Branch Manager'
+          ? 'manager'
+          : (role == 'Field Visitor' ? 'field_visitor' : role),
+      'position': position,
+      'salary': salary,
+      'branchName': branchName,
+      'branchId': branchId,
+      'joinedDate': joinedDate.toIso8601String(),
+      'status': status,
+      'targetAmount': targetAmount,
+      'assignedArea': assignedArea,
+      // For Field Visitors
+      'bankDetails': {
+        'bankName': bankName,
+        'branch': bankBranch,
+        'accountNumber': accountNo,
+        'accountName': accountHolder,
+      },
+      // For simple backend compat
+      'bankName': bankName,
+      'bankBranch': bankBranch,
+      'accountNo': accountNo,
+      'accountHolder': accountHolder,
+      'password': password,
+    };
+  }
 
-  factory Employee.fromJson(Map<String, dynamic> m) => Employee(
-    userId: m['userId'] as String? ?? '',
-    fullName: m['fullName'] as String? ?? '',
-    email: m['email'] as String? ?? '',
-    phone: m['phone'] as String? ?? '',
-    dob: DateTime.tryParse(m['dob'] as String? ?? '') ?? DateTime.now(),
-    role: m['role'] as String? ?? '',
-    position: m['position'] as String? ?? '',
-    salary: (m['salary'] as num?)?.toDouble() ?? 0.0,
-    branchName: m['branchName'] as String? ?? '',
-    branchId: m['branchId'] as String? ?? '',
-    joinedDate:
-        DateTime.tryParse(m['joinedDate'] as String? ?? '') ?? DateTime.now(),
-    status: m['status'] as String? ?? 'active',
-    bankName: m['bankName'] as String? ?? '',
-    bankBranch: m['bankBranch'] as String? ?? '',
-    accountNo: m['accountNo'] as String? ?? '',
-    accountHolder: m['accountHolder'] as String? ?? '',
-  );
+  factory Employee.fromJson(Map<String, dynamic> m, {String type = ''}) {
+    // Backend variations
+    // Managers: has 'email', 'name', 'code', 'role'='manager'
+    // FieldVisitors: 'name', 'userId', 'phone', 'role'='field_visitor', 'bankDetails'
+
+    String r = m['role'] as String? ?? type;
+    if (r == 'manager') r = 'Branch Manager';
+    if (r == 'field_visitor') r = 'Field Visitor';
+    if (r == 'branch_manager') r = 'Manager';
+
+    String name = m['fullName'] as String? ?? m['name'] as String? ?? '';
+    String uId = m['userId'] as String? ?? m['code'] as String? ?? '';
+    String ph = m['phone'] as String? ?? '';
+
+    // Bank details might be nested
+    String bName = '';
+    String bBranch = '';
+    String accNo = '';
+    String accHolder = '';
+
+    if (m['bankDetails'] != null) {
+      final bd = m['bankDetails'];
+      bName = bd['bankName'] ?? '';
+      bBranch = bd['branch'] ?? '';
+      accNo = bd['accountNumber'] ?? '';
+      accHolder = bd['accountName'] ?? '';
+    } else {
+      bName = m['bankName'] as String? ?? '';
+      bBranch = m['bankBranch'] as String? ?? '';
+      accNo = m['accountNo'] as String? ?? '';
+      accHolder = m['accountHolder'] as String? ?? '';
+    }
+
+    return Employee(
+      userId: uId,
+      id: m['_id']?.toString() ?? '',
+      fullName: name,
+      email: m['email'] as String? ?? '',
+      phone: ph,
+      dob: DateTime.tryParse(m['dob'] as String? ?? '') ?? DateTime.now(),
+      role: r,
+      position: r,
+      salary: (m['salary'] as num?)?.toDouble() ?? 0.0,
+      branchName: m['branchName'] as String? ?? '',
+      branchId: m['branchId'] as String? ?? '',
+      joinedDate:
+          DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now(),
+      status: m['status'] as String? ?? 'active',
+      targetAmount: (m['targetAmount'] as num?)?.toDouble() ?? 0.0,
+      assignedArea: m['assignedArea'] as String? ?? '',
+      bankName: bName,
+      bankBranch: bBranch,
+      accountNo: accNo,
+      accountHolder: accHolder,
+    );
+  }
 
   // Backwards compatibility for UI code that used 'id'
-  String get id => userId;
-  set id(String val) => userId = val;
+  // String get id => userId; // REMOVED to avoid confusion with MongoDB _id
+  // set id(String val) => userId = val;
   String get firstName => fullName.split(' ').first;
   set firstName(String val) =>
       fullName = '$val ${fullName.split(' ').skip(1).join(' ')}';
@@ -105,8 +169,11 @@ class Employee {
 
 class EmployeeService {
   static final List<Employee> _employees = [];
-  // For Windows, localhost is often accessible but sometimes requires 127.0.0.1
-  static const String _baseUrl = 'http://localhost:3000/api/employees';
+  // Pointing to NF Backend
+  static String get _usersUrl => ApiConfig.users;
+  static String get _fvUrl => ApiConfig.fieldVisitors;
+  static String get _mgrUrl => ApiConfig.managers;
+  static String get _authRegisterUrl => ApiConfig.authRegister;
 
   static Future<void> init() async {
     await fetchEmployees();
@@ -115,14 +182,32 @@ class EmployeeService {
 
   static Future<void> fetchEmployees() async {
     try {
-      final response = await http.get(Uri.parse(_baseUrl));
+      final response = await http.get(Uri.parse(_usersUrl));
       if (response.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(response.body);
-        _employees.clear();
-        for (final e in list) {
-          try {
-            _employees.add(Employee.fromJson(e as Map<String, dynamic>));
-          } catch (_) {}
+        final Map<String, dynamic> body = jsonDecode(response.body);
+        if (body['success'] == true) {
+          final data = body['data'];
+          _employees.clear();
+
+          // Managers
+          if (data['managers'] != null) {
+            for (final m in data['managers']) {
+              _employees.add(
+                Employee.fromJson(m as Map<String, dynamic>, type: 'Manager'),
+              );
+            }
+          }
+          // Field Visitors
+          if (data['fieldVisitors'] != null) {
+            for (final fv in data['fieldVisitors']) {
+              _employees.add(
+                Employee.fromJson(
+                  fv as Map<String, dynamic>,
+                  type: 'Field Visitor',
+                ),
+              );
+            }
+          }
         }
       }
     } catch (e) {
@@ -130,6 +215,164 @@ class EmployeeService {
     }
   }
 
+  static List<Employee> getEmployees() => List.unmodifiable(_employees);
+
+  static Future<void> addEmployee(Employee e) async {
+    try {
+      String url = '';
+      if (e.role == 'Branch Manager' || e.role == 'IT Sector') {
+        url = _authRegisterUrl;
+      } else {
+        url = _fvUrl;
+      }
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(e.toJson()),
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        await fetchEmployees();
+      } else {
+        debugPrint('Failed to add employee: ${response.body}');
+      }
+    } catch (err) {
+      debugPrint('Error adding employee: $err');
+    }
+  }
+
+  static Future<void> updateEmployee(String id, Employee updated) async {
+    debugPrint('Attempting to update employee ID: $id');
+    final existing = _employees.firstWhere(
+      (e) => e.userId == id || e.id == id,
+      orElse: () => Employee(
+        fullName: '',
+        email: '',
+        phone: '',
+        dob: DateTime.now(),
+        role: '',
+        salary: 0,
+        branchName: '',
+        joinedDate: DateTime.now(),
+      ),
+    );
+
+    if (existing.id.isEmpty) {
+      debugPrint('Update failed: Employee not found locally with ID $id');
+      await fetchEmployees();
+      return;
+    }
+
+    try {
+      String url = '';
+      if (updated.role == 'Branch Manager' || updated.role == 'IT Sector') {
+        url = '$_mgrUrl/${existing.id}';
+      } else {
+        url = '$_fvUrl/${existing.id}';
+      }
+
+      debugPrint('Sending PUT request to: $url');
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(updated.toJson()),
+      );
+
+      debugPrint('Update response status: ${response.statusCode}');
+      if (response.statusCode == 200) {
+        await fetchEmployees();
+        debugPrint('Employee updated successfully');
+      } else {
+        debugPrint('Update API failed: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error updating employee: $e');
+    }
+  }
+
+  static Future<void> deleteEmployee(String id) async {
+    debugPrint('Attempting to delete employee with ID: $id');
+    try {
+      final existing = _employees.firstWhere(
+        (e) => e.userId == id || e.id == id,
+        orElse: () => Employee(
+          fullName: '',
+          email: '',
+          phone: '',
+          dob: DateTime.now(),
+          role: '',
+          salary: 0,
+          branchName: '',
+          joinedDate: DateTime.now(),
+        ),
+      );
+
+      if (existing.id.isEmpty) {
+        debugPrint('Delete failed: Employee not found locally with ID $id');
+        // Force refresh just in case
+        await fetchEmployees();
+        return;
+      }
+
+      String url = '';
+      if (existing.role == 'Branch Manager' || existing.role == 'IT Sector') {
+        url = '$_mgrUrl/${existing.id}';
+      } else {
+        url = '$_fvUrl/${existing.id}';
+      }
+
+      debugPrint('Sending DELETE request to: $url');
+      final response = await http.delete(Uri.parse(url));
+      debugPrint('Delete response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        _employees.removeWhere((e) => e.id == existing.id);
+        debugPrint('Employee deleted successfully locally');
+      } else {
+        debugPrint('Delete API failed: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error deleting employee: $e');
+    }
+  }
+
+  static Employee create({
+    required String fullName,
+    required String email,
+    required String phone,
+    required DateTime dob,
+    required String role,
+    // required String position,
+    required double salary,
+    required String branchName,
+    required DateTime joinedDate,
+    String? userId,
+    String bankName = '',
+    String bankBranch = '',
+    String accountNo = '',
+    String accountHolder = '',
+  }) {
+    // ID generated in backend now
+    return Employee(
+      userId: userId ?? '',
+      fullName: fullName,
+      email: email,
+      phone: phone,
+      dob: dob,
+      role: role,
+      position: role,
+      salary: salary,
+      branchName: branchName,
+      bankName: bankName,
+      bankBranch: bankBranch,
+      accountNo: accountNo,
+      accountHolder: accountHolder,
+      joinedDate: joinedDate,
+    );
+  }
+
+  // --- Salary Handling (Local persistence for admin convenience) ---
   // salary payments history (each entry: {'date': DateTime, 'total': double})
   static final List<Map<String, dynamic>> _salaryPayments = [];
 
@@ -198,93 +441,11 @@ class EmployeeService {
     _persistSalaryPayments();
   }
 
-  static List<Employee> getEmployees() => List.unmodifiable(_employees);
-
-  static Future<void> addEmployee(Employee e) async {
-    try {
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(e.toJson()),
-      );
-      if (response.statusCode == 201) {
-        // Since backend adds ID and Password, we should fetch list again or parse response
-        // Simplest is to just fetch fresh list to be safe
-        await fetchEmployees();
-      }
-    } catch (e) {
-      debugPrint('Error adding employee: $e');
-    }
-  }
-
-  static Future<void> updateEmployee(String id, Employee updated) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/$id'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(updated.toJson()),
-      );
-      if (response.statusCode == 200) {
-        final idx = _employees.indexWhere((e) => e.userId == id); // Use userId
-        if (idx != -1) _employees[idx] = updated;
-      }
-    } catch (e) {
-      debugPrint('Error updating employee: $e');
-    }
-  }
-
-  static Future<void> deleteEmployee(String id) async {
-    try {
-      final response = await http.delete(Uri.parse('$_baseUrl/$id'));
-      if (response.statusCode == 200) {
-        _employees.removeWhere((e) => e.userId == id);
-      }
-    } catch (e) {
-      debugPrint('Error deleting employee: $e');
-    }
-  }
-
-  static Employee create({
-    required String fullName,
-    required String email,
-    required String phone,
-    required DateTime dob,
-    required String role,
-    // required String position,
-    required double salary,
-    required String branchName,
-    required DateTime joinedDate,
-    String? userId,
-    String bankName = '',
-    String bankBranch = '',
-    String accountNo = '',
-    String accountHolder = '',
-  }) {
-    // ID generated in backend now
-    return Employee(
-      userId: userId ?? '',
-      fullName: fullName,
-      email: email,
-      phone: phone,
-      dob: dob,
-      role: role,
-      position: role,
-      salary: salary,
-      branchName: branchName,
-      bankName: bankName,
-      bankBranch: bankBranch,
-      accountNo: accountNo,
-      accountHolder: accountHolder,
-      joinedDate: joinedDate,
-    );
-  }
-
   // Prepare payout items and total
   static Map<String, dynamic> prepareSalaryPayouts() {
     final items = _employees.map((e) {
       return {
         'id': e.userId,
-        // 'name': '${e.firstName} ${e.lastName}', // firstName/lastName getters handle full name split
         'name': e.fullName,
         'bankName': e.bankName,
         'bankBranch': e.bankBranch,
@@ -320,7 +481,11 @@ class EmployeeService {
   }
 
   // List of available positions / roles
-  static const List<String> roles = ['Manager', 'Field Visitor', 'IT Sector'];
+  static const List<String> roles = [
+    'Branch Manager',
+    'Field Visitor',
+    'IT Sector',
+  ];
 
   static const List<String> branches = [
     'Kalmunai',

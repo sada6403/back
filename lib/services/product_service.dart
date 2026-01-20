@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import '../config/api_config.dart';
 
 class Product {
   String id;
@@ -29,24 +31,26 @@ class Product {
        createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-    'id': id,
+    'productId': id,
     'name': name,
     'description': description,
-    'price': price,
-    'cost': cost,
+    'defaultPrice': price,
+    'buyingPrice': cost,
     'images': images,
     'soldPerMonth': soldPerMonth,
     'boughtPerMonth': boughtPerMonth,
     'currentStock': currentStock,
     'createdAt': createdAt.toIso8601String(),
+    'unit':
+        'Kg', // Default unit for now, as Management_IT doesn't seem to have it
   };
 
   factory Product.fromJson(Map<String, dynamic> m) => Product(
-    id: m['id'] as String,
-    name: m['name'] as String,
-    description: m['description'] as String,
-    price: (m['price'] as num).toDouble(),
-    cost: (m['cost'] as num).toDouble(),
+    id: m['_id']?.toString() ?? '', // MongoDB _id
+    name: m['name'] as String? ?? '',
+    description: m['description'] as String? ?? '',
+    price: (m['defaultPrice'] as num?)?.toDouble() ?? 0.0,
+    cost: (m['buyingPrice'] as num?)?.toDouble() ?? 0.0,
     images: (m['images'] as List<dynamic>?)?.map((e) => e as String).toList(),
     soldPerMonth: (m['soldPerMonth'] as num?)?.toDouble() ?? 0.0,
     boughtPerMonth: (m['boughtPerMonth'] as num?)?.toDouble() ?? 0.0,
@@ -59,7 +63,7 @@ class Product {
 
 class ProductService {
   static final List<Product> _products = [];
-  static const String _baseUrl = 'http://localhost:3000/api/products';
+  static String get _baseUrl => ApiConfig.products;
 
   static Future<void> init() async {
     await fetchProducts();
@@ -76,7 +80,7 @@ class ProductService {
         }
       }
     } catch (e) {
-      print('Error fetching products: $e');
+      debugPrint('Error fetching products: $e');
     }
   }
 
@@ -93,7 +97,7 @@ class ProductService {
         await fetchProducts();
       }
     } catch (e) {
-      print('Error adding product: $e');
+      debugPrint('Error adding product: $e');
     }
   }
 
@@ -105,11 +109,11 @@ class ProductService {
         body: jsonEncode(updated.toJson()),
       );
       if (response.statusCode == 200) {
-        final idx = _products.indexWhere((e) => e.id == id);
+        final idx = _products.indexWhere((e) => e.id == id); // id is _id now
         if (idx != -1) _products[idx] = updated;
       }
     } catch (e) {
-      print('Error updating product: $e');
+      debugPrint('Error updating product: $e');
     }
   }
 
@@ -120,7 +124,7 @@ class ProductService {
         _products.removeWhere((e) => e.id == id);
       }
     } catch (e) {
-      print('Error deleting product: $e');
+      debugPrint('Error deleting product: $e');
     }
   }
 

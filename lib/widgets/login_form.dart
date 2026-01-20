@@ -243,8 +243,9 @@ class _LoginFormState extends State<LoginForm> {
                               ScaffoldMessenger.of(this.context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                    'Password changed successfully',
+                                    'Password changed successfully. Your UserID and Credentials have been sent to your mobile.',
                                   ),
+                                  duration: Duration(seconds: 4),
                                 ),
                               );
                             } else {

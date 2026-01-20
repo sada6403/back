@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/member_service.dart';
+import '../services/transaction_service.dart';
+import '../models/transaction.dart';
 
 class MembersPage extends StatefulWidget {
   const MembersPage({super.key});
@@ -307,148 +311,598 @@ class _MembersPageState extends State<MembersPage> {
   void _showMemberDetails(Member member) {
     showDialog<void>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(
-          member.name,
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
+      builder: (c) => Dialog(
+        backgroundColor: Colors.grey[200], // Background to contrast "paper"
+        insetPadding: const EdgeInsets.all(10),
+        child: Container(
+          width: 500, // Max width for "A4" feel on tablets/desktop
+          constraints: const BoxConstraints(maxHeight: 800),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Contact: ${member.contact}', style: GoogleFonts.outfit()),
-              const SizedBox(height: 6),
-              Text(
-                'Total Bought: LKR ${member.totalBought.toStringAsFixed(2)}',
-                style: GoogleFonts.outfit(),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Total Sold: LKR ${member.totalSold.toStringAsFixed(2)}',
-                style: GoogleFonts.outfit(),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Transaction History:',
-                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              if (member.transactions.isEmpty)
-                Text(
-                  'No transactions',
-                  style: GoogleFonts.outfit(color: Colors.grey),
-                )
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: member.transactions.map((t) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Text(
-                        '${t.type.toUpperCase()}: LKR ${t.amount.toStringAsFixed(2)} - ${t.description}\n${DateFormat('yyyy-MM-dd HH:mm').format(t.date)}',
-                        style: GoogleFonts.outfit(fontSize: 12),
-                      ),
-                    );
-                  }).toList(),
+              // Toolbar
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Print Preview',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                    ),
+                    Row(
+                      children: [
+                        TextButton.icon(
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit'),
+                          onPressed: () {
+                            Navigator.of(c).pop();
+                            _openAddEditDialog(member: member);
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(c).pop(),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ),
+              const Divider(height: 1),
+              // "Paper" View
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Header with Logo
+                        Row(
+                          children: [
+                            Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                image: const DecorationImage(
+                                  image: AssetImage('assets/nf logo.jpg'),
+                                  fit: BoxFit.contain,
+                                ),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'NATURE FARMING',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green[800],
+                                    ),
+                                  ),
+                                  Text(
+                                    'Member Profile Report',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 16,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  DateFormat(
+                                    'yyyy-MM-dd',
+                                  ).format(DateTime.now()),
+                                  style: GoogleFonts.outfit(fontSize: 12),
+                                ),
+                                Text(
+                                  'Generated',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        const Divider(thickness: 2, color: Colors.green),
+                        const SizedBox(height: 16),
+                        // Member Details Grid
+                        Text(
+                          'MEMBER DETAILS',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[600],
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Table(
+                          columnWidths: const {
+                            0: IntrinsicColumnWidth(),
+                            1: FlexColumnWidth(),
+                          },
+                          children: [
+                            _buildInfoRow('Member ID', member.id),
+                            _buildInfoRow('Full Name', member.name),
+                            _buildInfoRow('Contact', member.contact),
+                            _buildInfoRow('Email', member.email),
+                            _buildInfoRow(
+                              'Joined Date',
+                              member.joinedDate != null
+                                  ? DateFormat(
+                                      'yyyy-MM-dd',
+                                    ).format(member.joinedDate!)
+                                  : '-',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        // Financial Summary
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                color: Colors.green[50],
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Total Bought',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                    Text(
+                                      'LKR ${member.totalBought.toStringAsFixed(2)}',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green[800],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                color: Colors.orange[50],
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Total Sold',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                    Text(
+                                      'LKR ${member.totalSold.toStringAsFixed(2)}',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.orange[800],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'TRANSACTION HISTORY',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[600],
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FutureBuilder<List<Transaction>>(
+                          future: TransactionService.getTransactions(
+                            memberId: member.id,
+                          ),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            final txs = snapshot.data!;
+                            if (txs.isEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text(
+                                  'No transactions recorded.',
+                                  style: GoogleFonts.outfit(
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              );
+                            }
+                            return Table(
+                              border: TableBorder.all(color: Colors.grey[300]!),
+                              children: [
+                                TableRow(
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                  ),
+                                  children: [
+                                    _buildHeaderCell('Date'),
+                                    _buildHeaderCell('Type'),
+                                    _buildHeaderCell('Desc'),
+                                    _buildHeaderCell(
+                                      'Amount',
+                                      alignRight: true,
+                                    ),
+                                  ],
+                                ),
+                                ...txs.map(
+                                  (t) => TableRow(
+                                    children: [
+                                      _buildCell(
+                                        DateFormat('yyyy-MM-dd').format(t.date),
+                                      ),
+                                      _buildCell(t.type.toUpperCase()),
+                                      _buildCell(t.description),
+                                      _buildCell(
+                                        t.amount.toStringAsFixed(2),
+                                        alignRight: true,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Print Action
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.all(16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.print),
+                    label: const Text('PRINT TO PDF'),
+                    onPressed: () => _generateAndDownloadPdf(member),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(c).pop(),
-            child: Text('Close', style: GoogleFonts.outfit()),
+      ),
+    );
+  }
+
+  TableRow _buildInfoRow(String label, String value) {
+    return TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[700],
+            ),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(c).pop();
-              _openAddEditDialog(member: member);
-            },
-            child: Text('Edit', style: GoogleFonts.outfit()),
-          ),
-        ],
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Text(value, style: GoogleFonts.outfit()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeaderCell(String text, {bool alignRight = false}) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
+        textAlign: alignRight ? TextAlign.right : TextAlign.left,
+      ),
+    );
+  }
+
+  Widget _buildCell(String text, {bool alignRight = false}) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(fontSize: 12),
+        textAlign: alignRight ? TextAlign.right : TextAlign.left,
       ),
     );
   }
 
   Future<void> _generateAndDownloadPdf(Member member) async {
     try {
+      final transactions = await TransactionService.getTransactions(
+        memberId: member.id,
+      );
       final pdf = pw.Document();
 
+      // Load Logo
+      final logoImage = pw.MemoryImage(
+        (await rootBundle.load('assets/nf logo.jpg')).buffer.asUint8List(),
+      );
+
+      // Current Date
+      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
       pdf.addPage(
-        pw.Page(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
           build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'Member Report: ${member.name}',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
+            return [
+              // Header
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Container(
+                    width: 60,
+                    height: 60,
+                    child: pw.Image(logoImage),
                   ),
-                ),
-                pw.SizedBox(height: 12),
-                pw.Text('Contact: ${member.contact}'),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  'Total Bought: LKR ${member.totalBought.toStringAsFixed(2)}',
-                ),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  'Total Sold: LKR ${member.totalSold.toStringAsFixed(2)}',
-                ),
-                pw.SizedBox(height: 6),
-                pw.Text(
-                  'Report Date: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                ),
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  'Transaction History:',
-                  style: pw.TextStyle(
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
+                  pw.SizedBox(width: 16),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'NATURE FARMING',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green800,
+                          ),
+                        ),
+                        pw.Text(
+                          'Member Profile Report',
+                          style: const pw.TextStyle(
+                            fontSize: 16,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                pw.SizedBox(height: 12),
-                if (member.transactions.isEmpty)
-                  pw.Text('No transactions')
-                else
-                  pw.TableHelper.fromTextArray(
-                    headers: ['Date', 'Type', 'Amount (LKR)', 'Description'],
-                    data: member.transactions.map((t) {
-                      return [
-                        DateFormat('yyyy-MM-dd HH:mm').format(t.date),
-                        t.type.toUpperCase(),
-                        t.amount.toStringAsFixed(2),
-                        t.description,
-                      ];
-                    }).toList(),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(dateStr, style: const pw.TextStyle(fontSize: 12)),
+                      pw.Text(
+                        'Generated',
+                        style: const pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey,
+                        ),
+                      ),
+                    ],
                   ),
-              ],
-            );
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(color: PdfColors.green, thickness: 2),
+              pw.SizedBox(height: 20),
+
+              // Details
+              pw.Text(
+                'MEMBER DETAILS',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.grey600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table(
+                columnWidths: const {
+                  0: pw.IntrinsicColumnWidth(),
+                  1: pw.FlexColumnWidth(),
+                },
+                children: [
+                  _buildPdfInfoRow('Member ID', member.id),
+                  _buildPdfInfoRow('Full Name', member.name),
+                  _buildPdfInfoRow('Contact', member.contact),
+                  _buildPdfInfoRow('Email', member.email),
+                  _buildPdfInfoRow(
+                    'Joined Date',
+                    member.joinedDate != null
+                        ? DateFormat('yyyy-MM-dd').format(member.joinedDate!)
+                        : '-',
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+
+              // Financial
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      color: PdfColors.green50,
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            'Total Bought',
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.green,
+                            ),
+                          ),
+                          pw.Text(
+                            'LKR ${member.totalBought.toStringAsFixed(2)}',
+                            style: pw.TextStyle(
+                              fontSize: 14,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.green800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(10),
+                      color: PdfColors.orange50,
+                      child: pw.Column(
+                        children: [
+                          pw.Text(
+                            'Total Sold',
+                            style: const pw.TextStyle(
+                              fontSize: 10,
+                              color: PdfColors.orange,
+                            ),
+                          ),
+                          pw.Text(
+                            'LKR ${member.totalSold.toStringAsFixed(2)}',
+                            style: pw.TextStyle(
+                              fontSize: 14,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.orange800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'TRANSACTION HISTORY',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.grey600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+
+              // Table
+              if (transactions.isEmpty)
+                pw.Text(
+                  'No transactions recorded.',
+                  style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
+                )
+              else
+                pw.TableHelper.fromTextArray(
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey100,
+                  ),
+                  headerHeight: 25,
+                  cellHeight: 30,
+                  cellAlignments: {
+                    0: pw.Alignment.centerLeft,
+                    1: pw.Alignment.centerLeft,
+                    2: pw.Alignment.centerLeft,
+                    3: pw.Alignment.centerRight,
+                  },
+                  headers: ['Date', 'Type', 'Desc', 'Amount (LKR)'],
+                  data: transactions.map((t) {
+                    return [
+                      DateFormat('yyyy-MM-dd').format(t.date),
+                      t.type.toUpperCase(),
+                      t.description,
+                      t.amount.toStringAsFixed(2),
+                    ];
+                  }).toList(),
+                ),
+            ];
           },
         ),
       );
 
       final directory = await getDownloadsDirectory();
+      // Safe filename
+      final safeName = member.name.replaceAll(RegExp(r'[^\w\s]+'), '');
       final fileName =
-          'member_report_${member.name}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          'MemberReport_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('${directory?.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF saved to Downloads: $fileName')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Report Saved: $fileName')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error generating PDF: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
+  }
+
+  pw.TableRow _buildPdfInfoRow(String label, String value) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 5),
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.grey700,
+            ),
+          ),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 5),
+          child: pw.Text(value),
+        ),
+      ],
+    );
   }
 
   @override
@@ -837,6 +1291,7 @@ class _MembersPageState extends State<MembersPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'member_fab',
         onPressed: () => _openAddEditDialog(),
         child: const Icon(Icons.add),
       ),
