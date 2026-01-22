@@ -34,13 +34,13 @@ App Runner connects directly to your source code or container image and runs it.
     *   **Runtime**: Node.js 18
     *   **Build command**: `npm install`
     *   **Start command**: `node server.js`
-    *   **Port**: `3000`
+    *   **Port**: `3001`
 
 5.  **Configure Service**:
     *   Give your service a name (e.g., `management-it-api`).
     *   **Environment Variables**: Add your `.env` variables here!
         *   `MONGO_URI`: Your MongoDB connection string.
-        *   `PORT`: `3000`
+        *   `PORT`: `3001`
 
 6.  **Deploy**: Click "Create & deploy". AWS will give you a URL (e.g., `https://xyz.awsapprunner.com`).
 
@@ -90,11 +90,11 @@ You can either `git clone` your repo or copy files manually.
     ```
 3.  **Run Container**:
     ```bash
-    sudo docker run -d -p 3000:3000 --env-file .env --name api management-api
+    sudo docker run -d -p 3001:3001 --env-file .env --name api management-api
     ```
 
 ### 6. Verify
-Visit `http://<EC2-Public-IP>:3000` in your browser. You should see "Management IT Backend is Running".
+Visit `http://<EC2-Public-IP>:3001` in your browser. You should see "Management IT Backend is Running".
 
 ---
 

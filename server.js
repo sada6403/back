@@ -7,6 +7,8 @@ const bodyParser = require('body-parser');
 const employeesRouter = require('./routes/employees');
 const productsRouter = require('./routes/products');
 const membersRouter = require('./routes/members');
+const authRouter = require('./routes/auth'); // Added Auth Routes
+const smsRouter = require('./routes/sms'); // Added SMS Routes
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +33,8 @@ mongoose.connect(process.env.MONGO_URI, {
 app.use('/api/employees', employeesRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/members', membersRouter);
+app.use('/api/auth', authRouter); // Register Auth Routes
+app.use('/api/sms', smsRouter); // Register SMS Routes
 
 app.get('/', (req, res) => {
     res.send('Management IT Backend is Running');
