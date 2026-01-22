@@ -1,0 +1,27 @@
+const mongoose = require('mongoose');
+
+// Using the same schema structure as Employee
+// Assuming the collections have similar fields (userId, fullName, email, etc.)
+const ManagerSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    fullName: { type: String, required: true },
+    email: { type: String, required: true },
+    phone: { type: String, required: true },
+    dob: { type: Date },
+    role: { type: String, required: true }, // Should be 'Manager'
+    position: { type: String },
+    salary: { type: Number, required: true },
+    branchName: { type: String, required: true },
+    branchId: { type: String },
+    joinedDate: { type: Date, default: Date.now },
+    password: { type: String, required: true },
+    status: { type: String, default: 'active' },
+    bankName: { type: String },
+    bankBranch: { type: String },
+    accountNo: { type: String },
+    accountHolder: { type: String }
+}, { collection: 'managers' });
+
+// Explicitly pointing to 'managers' collection
+
+module.exports = mongoose.model('Manager', ManagerSchema);
