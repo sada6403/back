@@ -7,8 +7,8 @@ const bodyParser = require('body-parser');
 const employeesRouter = require('./routes/employees');
 const productsRouter = require('./routes/products');
 const membersRouter = require('./routes/members');
-const authRouter = require('./routes/auth'); // Added Auth Routes
-const smsRouter = require('./routes/sms'); // Added SMS Routes
+const authRouter = require('./routes/authRoutes'); // Use NEW Auth Routes
+const smsRouter = require('./routes/smsRoutes'); // Use NEW SMS Routes
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +16,12 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
+
+// Request Logger
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+});
 
 // Database Connection
 console.log('Attempting to connect to MongoDB...');
