@@ -1,0 +1,17 @@
+
+--- 2026-01-21T14:10:07.787Z ---
+Status: 404
+URL: https://msmsent.mobitel.lk/BulkSMS/BulkSMS_v2.asmx/SendBulk
+Headers: {"server":"nginx","date":"Wed, 21 Jan 2026 14:10:12 GMT","content-type":"text/html;charset=ISO-8859-1","connection":"keep-alive","set-cookie":["visid_incap_3243202=BNGo4/tlQh6Nhw/HdL0YJD/ecGkAAAAAQUIPAAAAAAA9R5nMsn4xNSQHoRPTFFKw; expires=Wed, 20 Jan 2027 15:34:21 GMT; HttpOnly; path=/; Domain=.mobitel.lk","incap_ses_1788_3243202=v5YVOQAOiSSknIJaEEHQGD/ecGkAAAAAloK6DKp9GNxSu92/XCvtYw==; path=/; Domain=.mobitel.lk"],"x-cdn":"Imperva","content-security-policy-report-only":"default-src 'self' 'unsafe-eval' 'unsafe-hashes' 'unsafe-inline' data: blob: ; form-action 'none' ; frame-ancestors 'self' ; script-src 'unsafe-eval' 'unsafe-hashes' 'report-sample'; report-uri /csp_report; report-to /csp_report","transfer-encoding":"chunked","x-iinfo":"42-12230624-12230712 NNYN CT(36 86 0) RT(1769004607806 518) q(0 0 1 2) r(1 1) U24"}
+Response: <html>
+<head><title>
+Web Services
+</title></head>
+<body>
+<h1>404 Not Found: Invalid Request</h1>
+<script type="text/javascript" src="/_Incapsula_Resource?SWJIYLWA=719d34d31c8e3a6e6fffd425f7e032f3&ns=1&cb=1081099522" async></script></body>
+</html>
+
+----------------
+
+ERROR: SMS Gateway Error: 404 - HTML Response (Firewall?)
