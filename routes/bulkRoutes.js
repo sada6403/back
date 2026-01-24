@@ -101,7 +101,7 @@ const generateUserId = async (TargetModel, role, branch) => {
             nextNum = parseInt(numPart) + 1;
         }
     }
-    return `${prefix}${String(nextNum).padStart(6, '0')}`;
+    return `${prefix}${String(nextNum).padStart(3, '0')}`;
 };
 
 // POST /api/bulk/employees
