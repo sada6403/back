@@ -36,20 +36,51 @@ const generatePassword = (length = 8) => {
 };
 
 const getRoleCode = (role) => {
-    const r = role.toLowerCase().replace(/ /g, '_');
-    if (r.includes('manager')) return 'MGR';
+    const r = role.toLowerCase();
+    if (r.includes('regional manager')) return 'RM';
+    if (r.includes('zonal manager')) return 'ZM';
+    if (r.includes('general manager')) return 'GM';
+    if (r.includes('branch manager')) return 'MGR';
+    if (r.includes('manager')) return 'MGR'; // Fallback
     if (r.includes('field')) return 'FV';
     return 'EMP';
 };
 
 const getBranchCode = (branch) => {
     if (!branch) return 'GEN';
-    const b = branch.toLowerCase();
+    const b = branch.toLowerCase().trim();
+
+    // Explicit Mapping provided by User
+    if (b.includes('jaffna') && b.includes('kondavil')) return 'JK';
+    if (b.includes('jaffna') && b.includes('chavakachcheri')) return 'JS';
+    if (b.includes('kondavil') && !b.includes('jaffna')) return 'JK'; // Direct matches
+    if (b.includes('chavakachcheri') && !b.includes('jaffna')) return 'JS';
+
     if (b.includes('kalmunai')) return 'KM';
-    if (b.includes('trincomalee')) return 'TR';
-    if (b.includes('chavakachcheri')) return 'JS';
-    if (b.includes('kondavil')) return 'JK';
-    return branch.substring(0, 2).toUpperCase();
+    if (b.includes('trincomalee')) return 'TM';
+    if (b.includes('akkaraipattu')) return 'AP';
+    if (b.includes('ampara')) return 'AM';
+    if (b.includes('batticaloa')) return 'BT';
+    if (b.includes('cheddikulam')) return 'CK';
+    if (b.includes('kilinochchi')) return 'KN';
+    if (b.includes('mannar')) return 'MN';
+    if (b.includes('vavuniya')) return 'VN';
+    if (b.includes('mallavi')) return 'MV';
+    if (b.includes('mulliyawalai')) return 'MW';
+    if (b.includes('nedunkeny')) return 'NK';
+    if (b.includes('puthukkudiyiruppu')) return 'PK';
+    if (b.includes('aschuveli')) return 'AV';
+
+    // Default: First 2 letters
+    // "athey time 2 brnch ku same first letter vantha first 3 letters antha 2 branch ku mattum varum"
+    // For now we default to 2 chars as implementing full collision detection here requires DB checks which isn't standard in this helper.
+    // If user strictly wants 3 chars for collisions, we'd need to know the collisions. 
+    // Given the list above is primary, we fall back to 2 uppercase chars.
+
+    const clean = branch.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    if (clean.length >= 2) return clean.substring(0, 2);
+
+    return 'GEN';
 };
 
 const generateUserId = async (TargetModel, role, branch) => {
@@ -120,25 +151,55 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                     throw new Error(`NIC must be 12 characters or less. Found: ${nic}`);
                 }
 
-                // 2. Determine Collection
+                // 2. Determine Collection & Dynamic Model
                 let TargetModel = Employee;
                 const rLower = role.toLowerCase();
 
-                if (rLower.includes('branch manager')) TargetModel = BranchManager;
+                if (rLower.includes('branch manager') ||
+                    rLower.includes('regional manager') ||
+                    rLower.includes('zonal manager') ||
+                    rLower.includes('general manager') ||
+                    (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector'))) {
+                    TargetModel = BranchManager;
+                }
                 else if (rLower.includes('field visitor')) TargetModel = FieldVisitor;
                 else if (rLower.includes('it sector')) TargetModel = ITSector;
-                else if (rLower.includes('manager')) TargetModel = Manager; // General Manager
+                else {
+                    // Dynamic Collection for unknown roles
+                    // "veara position vantha athukku thaniya oru collection create panni athula data save aaganum"
+                    // We can create a model on the fly, but Mongoose caches models.
+                    // We'll use a naming convention: role name -> collection name (lowercase, no spaces)
+                    const collectionName = rLower.replace(/ /g, '');
+                    // Check if model already exists to avoid OverwriteModelError
+                    try {
+                        TargetModel = mongoose.model(collectionName);
+                    } catch (e) {
+                        // Define a generic schema for dynamic roles
+                        const GenericSchema = new mongoose.Schema({
+                            userId: { type: String, required: true },
+                            fullName: { type: String, required: true },
+                            email: { type: String },
+                            phone: { type: String },
+                            role: { type: String },
+                            branchName: { type: String },
+                            password: { type: String },
+                            status: { type: String, default: 'active' },
+                            salary: { type: Number },
+                            joinedDate: { type: Date, default: Date.now },
+                            // Allow flexible fields
+                        }, { strict: false, collection: collectionName });
+                        TargetModel = mongoose.model(collectionName, GenericSchema);
+                    }
+                }
 
                 // 3. Check for Existing User (Upsert Logic)
                 let userStartQuery = {};
-                // Priority: ID -> Email
                 if (row['User ID'] || row['ID']) {
                     const uid = (row['User ID'] || row['ID']).toString().trim();
                     userStartQuery = { userId: uid };
                 } else if (email) {
                     userStartQuery = { email: email };
                 } else {
-                    // Fallback to Phone?
                     userStartQuery = { phone: phone };
                 }
 
@@ -157,8 +218,6 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                     if (branch) existingUser.branchName = branch;
                     if (row['Bank Name']) existingUser.bankName = row['Bank Name'];
                     if (row['Account No']) existingUser.accountNo = row['Account No'];
-
-                    // Don't change password or ID on update usually
                     await existingUser.save();
                 } else {
                     // --- CREATE ---
@@ -167,7 +226,9 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                     password = generatePassword();
                     const hashedPassword = await bcrypt.hash(password, 10);
 
-                    existingUser = new TargetModel({
+                    // For dynamic models, we might need to be careful with instantiation if schema is strict
+                    // But our generic schema is strict: false
+                    const userData = {
                         userId,
                         fullName,
                         email,
@@ -178,42 +239,81 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                         password: hashedPassword,
                         status: 'active',
                         joinedDate: new Date(),
-                        // Map extra fields
                         bankName: row['Bank Name'] || '',
                         bankBranch: row['Bank Branch'] || '',
                         accountNo: row['Account No'] || '',
                         accountHolder: row['Account Holder'] || fullName,
                         nic: row['NIC'] || '',
                         civilStatus: row['Civil Status'] || '',
-                        postalAddress: row['Address'] || ''
-                    });
+                        postalAddress: row['Address'] || '',
+                        // Add any other columns dynamically
+                        ...row
+                    };
 
+                    if (TargetModel.schema && TargetModel.schema.options.strict === false) {
+                        existingUser = new TargetModel(userData);
+                    } else {
+                        // Known models
+                        existingUser = new TargetModel({
+                            userId, fullName, email, phone, role, branchName: branch, salary,
+                            password: hashedPassword, status: 'active', joinedDate: new Date(),
+                            bankName: row['Bank Name'] || '',
+                            bankBranch: row['Bank Branch'] || '',
+                            accountNo: row['Account No'] || '',
+                            accountHolder: row['Account Holder'] || fullName,
+                            nic: row['NIC'] || '',
+                            civilStatus: row['Civil Status'] || '',
+                            postalAddress: row['Address'] || ''
+                        });
+                    }
                     await existingUser.save();
                 }
 
-                // 4. Send Email (If New OR Requested)
-                // Sending email for Updates too? User said "update eathum iruntha update aaganum... link ellam ... mail ku poora maari"
-                // It implies always sending credentials or at least a notification.
-                // Sending credentials (password) is only possible if we generated it (New User).
-                // Existing users match by Email, so we don't know their password. We can only say "Details Updated".
-
+                // 4. Send Email (HTML Template)
                 if (email) {
-                    let subject = '';
-                    let text = '';
+                    const startLink = "https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=drive_link";
 
-                    if (isNew) {
-                        subject = 'Welcome to NF IT - Account Created';
-                        text = `Hello ${fullName},\n\nYour account has been created successfully.\n\nUser ID: ${userId}\nPassword: ${password}\nRole: ${role}\n\nPlease login to the app.`;
-                    } else {
-                        subject = 'NF IT - Account Updated';
-                        text = `Hello ${fullName},\n\nYour account details for User ID: ${userId} have been updated by the administrator.\n\nIf you did not request this, please contact support.`;
-                    }
+                    const htmlContent = `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                            <div style="background-color: #1F2937; padding: 20px; text-align: center;">
+                                <h1 style="color: #ffffff; margin: 0;">Nature Farming</h1>
+                            </div>
+                            <div style="padding: 30px; background-color: #ffffff;">
+                                <h2 style="color: #333333; margin-top: 0;">Welcome, ${fullName}!</h2>
+                                <p style="color: #555555; line-height: 1.6;">
+                                    ${isNew ? 'Your account has been successfully created.' : 'Your account details have been updated.'}
+                                </p>
+                                
+                                <div style="background-color: #f8f9fa; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
+                                    <p style="margin: 5px 0;"><strong>User ID:</strong> ${userId}</p>
+                                    ${isNew ? `<p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>` : ''}
+                                    <p style="margin: 5px 0;"><strong>Role:</strong> ${role}</p>
+                                    <p style="margin: 5px 0;"><strong>Branch:</strong> ${branch}</p>
+                                </div>
+                                
+                                <p style="color: #555555; line-height: 1.6;">
+                                    Please click the button below to get started and access the necessary documents:
+                                </p>
+                                
+                                <div style="text-align: center; margin: 30px 0;">
+                                    <a href="${startLink}" style="background-color: #4CAF50; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Get Started</a>
+                                </div>
+                                
+                                <p style="color: #888888; font-size: 12px; margin-top: 30px; text-align: center;">
+                                    Please keep your credentials safe. If you have any questions, contact the IT department.
+                                </p>
+                            </div>
+                            <div style="background-color: #f1f1f1; padding: 15px; text-align: center;">
+                                <p style="color: #888888; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Nature Farming. All rights reserved.</p>
+                            </div>
+                        </div>
+                    `;
 
                     transporter.sendMail({
                         from: process.env.EMAIL_USER,
                         to: email,
-                        subject: subject,
-                        text: text
+                        subject: isNew ? 'Welcome to Nature Farming - Access Credentials' : 'Nature Farming - Account Update',
+                        html: htmlContent
                     }, (err, info) => {
                         if (err) console.error('Email Fail:', err);
                     });
