@@ -4,6 +4,7 @@ const TransactionSchema = new mongoose.Schema({
     billNumber: { type: String, required: true, unique: true },
     type: { type: String, enum: ['buy', 'sell'], required: true },
     memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true, index: true },
+    memberCode: { type: String, required: false }, // Use member's custom ID (e.g. NF-MEM-001)
     fieldVisitorId: { type: mongoose.Schema.Types.ObjectId, ref: 'FieldVisitor', required: true, index: true },
     productName: { type: String, required: true }, // Store name snapshot
     quantity: { type: Number, required: true },

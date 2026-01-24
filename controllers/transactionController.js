@@ -89,6 +89,7 @@ const createTransaction = async (req, res) => {
             unitPrice: Number(unitPrice),
             totalAmount,
             branchId,
+            memberCode: member.memberId, // Save the visible Member Code
             date: new Date(), // Explicitly set date to ensure it exists for PDF
             status: status || 'approved' // Default to approved if not provided
         });
