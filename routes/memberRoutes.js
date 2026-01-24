@@ -4,12 +4,12 @@ const { registerMember, getMembers, updateMember, deleteMember, importMembers } 
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.route('/')
-    .post(protect, authorize('field_visitor'), registerMember)
+    .post(protect, authorize('field_visitor', 'it_sector', 'manager'), registerMember)
     .get(getMembers);
 
 router.route('/:id')
-    .put(protect, authorize('manager'), updateMember)
-    .delete(protect, authorize('manager'), deleteMember);
+    .put(protect, authorize('manager', 'it_sector'), updateMember)
+    .delete(protect, authorize('manager', 'it_sector'), deleteMember);
 
 router.post('/import', protect, importMembers);
 

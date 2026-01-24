@@ -17,7 +17,17 @@ const BranchManagerSchema = new mongoose.Schema({
     bankName: { type: String },
     bankBranch: { type: String },
     accountNo: { type: String },
-    accountHolder: { type: String }
+    accountHolder: { type: String },
+
+    // Extended Profile
+    nic: { type: String },
+    civilStatus: { type: String },
+    gender: { type: String },
+    postalAddress: { type: String },
+    permanentAddress: { type: String },
+    education: { type: mongoose.Schema.Types.Mixed },
+    workExperience: { type: Array },
+    references: { type: Array }
 }, { collection: 'branchmanagers' });
 
 module.exports = mongoose.model('BranchManager', BranchManagerSchema);

@@ -1,0 +1,25 @@
+Starting Server...
+CRASH: Error: Cannot find module 'pdfkit'
+Require stack:
+- C:\Users\USER\OneDrive\Documents\Desktop\New\Management_IT\backend\utils\pdfGenerator.js
+- C:\Users\USER\OneDrive\Documents\Desktop\New\Management_IT\backend\controllers\transactionController.js
+- C:\Users\USER\OneDrive\Documents\Desktop\New\Management_IT\backend\routes\transactionRoutes.js
+- C:\Users\USER\OneDrive\Documents\Desktop\New\Management_IT\backend\server.js
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1048:15)
+    at Module._load (node:internal/modules/cjs/loader:901:27)
+    at Module.require (node:internal/modules/cjs/loader:1115:19)
+    at require (node:internal/modules/helpers:130:18)
+    at Object.<anonymous> (C:\Users\USER\OneDrive\Documents\Desktop\New\Management_IT\backend\utils\pdfGenerator.js:1:21)
+    at Module._compile (node:internal/modules/cjs/loader:1241:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1295:10)
+    at Module.load (node:internal/modules/cjs/loader:1091:32)
+    at Module._load (node:internal/modules/cjs/loader:938:12)
+    at Module.require (node:internal/modules/cjs/loader:1115:19) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [
+    'C:\\Users\\USER\\OneDrive\\Documents\\Desktop\\New\\Management_IT\\backend\\utils\\pdfGenerator.js',
+    'C:\\Users\\USER\\OneDrive\\Documents\\Desktop\\New\\Management_IT\\backend\\controllers\\transactionController.js',
+    'C:\\Users\\USER\\OneDrive\\Documents\\Desktop\\New\\Management_IT\\backend\\routes\\transactionRoutes.js',
+    'C:\\Users\\USER\\OneDrive\\Documents\\Desktop\\New\\Management_IT\\backend\\server.js'
+  ]
+}

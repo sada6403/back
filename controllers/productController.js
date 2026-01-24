@@ -91,12 +91,53 @@ const getProducts = async (req, res) => {
                 }
             },
             {
+                $addFields: {
+                    history: {
+                        $filter: {
+                            input: '$transactions',
+                            as: 'tx',
+                            cond: {
+                                $gte: ['$$tx.date', new Date(new Date().setFullYear(new Date().getFullYear() - 1))]
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                $addFields: {
+                    history: {
+                        $map: {
+                            input: {
+                                $filter: {
+                                    input: '$transactions',
+                                    as: 'tx',
+                                    cond: {
+                                        $gte: ['$$tx.date', new Date(new Date().setFullYear(new Date().getFullYear() - 1))]
+                                    }
+                                }
+                            },
+                            as: 'tx',
+                            in: {
+                                date: '$$tx.date',
+                                type: '$$tx.type',
+                                quantity: '$$tx.quantity',
+                                totalAmount: '$$tx.totalAmount'
+                            }
+                        }
+                    }
+                }
+            },
+            {
                 $project: {
                     transactions: 0,
                     currentMonthTransactions: 0
                 }
             }
         ]);
+
+
+
+
         res.json(products);
     } catch (error) {
         console.error(error);

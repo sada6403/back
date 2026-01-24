@@ -17,7 +17,18 @@ const FieldVisitorSchema = new mongoose.Schema({
     bankName: { type: String },
     bankBranch: { type: String },
     accountNo: { type: String },
-    accountHolder: { type: String }
+    accountHolder: { type: String },
+
+    // Extended Profile
+    assignedArea: { type: String, default: '' },
+    nic: { type: String },
+    civilStatus: { type: String },
+    gender: { type: String },
+    postalAddress: { type: String },
+    permanentAddress: { type: String },
+    education: { type: mongoose.Schema.Types.Mixed }, // String or Object
+    workExperience: { type: Array },
+    references: { type: Array }
 }, { collection: 'fieldvisitors' });
 
 module.exports = mongoose.model('FieldVisitor', FieldVisitorSchema);

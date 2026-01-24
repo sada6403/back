@@ -1,38 +1,59 @@
 const OTP = require('../models/OTP');
 const sendSMS = require('./smsService');
 
+const { sendEmail } = require('./emailService');
+
 // Generate a random 6-digit OTP
 const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-// Create and send OTP to user
-const createAndSendOTP = async (userId, phone, purpose = 'password_reset') => {
+// Create and send OTP to user (supports phone or email)
+const createAndSendOTP = async (userId, identifier, purpose = 'password_reset') => {
     try {
         // Delete any existing OTPs for this user and purpose
         await OTP.deleteMany({ userId, purpose });
 
         // Generate new OTP
         const otpCode = generateOTP();
+        const isEmail = identifier.includes('@');
 
         // Create OTP record
-        const otp = new OTP({
+        const otpData = {
             userId,
-            phone,
             otp: otpCode,
             purpose,
             expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-        });
+        };
 
+        if (isEmail) {
+            otpData.email = identifier;
+        } else {
+            otpData.phone = identifier;
+        }
+
+        const otp = new OTP(otpData);
         await otp.save();
 
-        // Send SMS
-        const message = `Your NF Farming ${purpose.replace('_', ' ')} OTP is: ${otpCode}. Valid for 5 minutes.`;
-        await sendSMS(phone, message);
+        if (isEmail) {
+            const subject = `Your OTP for ${purpose.replace('_', ' ')}`;
+            const html = `
+                <div style="font-family: Arial, sans-serif; padding: 20px;">
+                    <h2>Your OTP Code</h2>
+                    <p>Your OTP code is: <strong style="font-size: 24px;">${otpCode}</strong></p>
+                    <p>This code is valid for 5 minutes.</p>
+                </div>
+             `;
+            await sendEmail(identifier, subject, html);
+        } else {
+            // Send SMS
+            const message = `Your NF Farming ${purpose.replace('_', ' ')} OTP is: ${otpCode}. Valid for 5 minutes.`;
+            await sendSMS(identifier, message);
+        }
 
         return {
             success: true,
-            message: 'OTP sent successfully',
+            message: `OTP sent to ${isEmail ? 'email' : 'mobile'} successfully`,
             expiresAt: otp.expiresAt,
         };
     } catch (error) {
@@ -44,6 +65,7 @@ const createAndSendOTP = async (userId, phone, purpose = 'password_reset') => {
 // Verify OTP
 const verifyOTP = async (userId, otpCode, purpose = 'password_reset') => {
     try {
+        // Find the OTP
         // Find the OTP
         const otp = await OTP.findOne({
             userId,

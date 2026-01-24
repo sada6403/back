@@ -47,13 +47,16 @@ const Manager = require('../models/Manager');
 const FieldVisitor = require('../models/FieldVisitor');
 const BranchManager = require('../models/BranchManager');
 
+const ITSector = require('../models/ITSector');
+
 // GET all employees (Aggregated from sub-collections)
 router.get('/', async (req, res) => {
     try {
-        const [managers, fieldVisitors, branchManagers, employees] = await Promise.all([
+        const [managers, fieldVisitors, branchManagers, itSectors, employees] = await Promise.all([
             Manager.find(),
             FieldVisitor.find(),
             BranchManager.find(),
+            ITSector.find(),
             Employee.find() // Keep original too just in case
         ]);
 
@@ -64,6 +67,7 @@ router.get('/', async (req, res) => {
                 managers,
                 fieldVisitors,
                 branchManagers,
+                itSectors,
                 employees
             }
         });
@@ -86,7 +90,16 @@ router.post('/', async (req, res) => {
         bankName,
         bankBranch,
         accountNo,
-        accountHolder
+        accountHolder,
+        assignedArea, // Added
+        nic,
+        civilStatus,
+        gender,
+        postalAddress,
+        permanentAddress,
+        education,
+        workExperience,
+        references
     } = req.body;
 
     try {
@@ -142,7 +155,16 @@ router.post('/', async (req, res) => {
             bankName,
             bankBranch,
             accountNo,
-            accountHolder
+            accountHolder,
+            assignedArea, // Added
+            nic,
+            civilStatus,
+            gender,
+            postalAddress,
+            permanentAddress,
+            education,
+            workExperience,
+            references
         });
 
         const savedEmployee = await newEmployee.save();
@@ -186,7 +208,7 @@ router.post('/', async (req, res) => {
 // PUT update employee
 router.put('/:id', async (req, res) => {
     try {
-        const models = [Manager, FieldVisitor, BranchManager, Employee];
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
         let updated = null;
 
         for (const model of models) {
@@ -218,7 +240,7 @@ router.put('/:id', async (req, res) => {
 // DELETE
 router.delete('/:id', async (req, res) => {
     try {
-        const models = [Manager, FieldVisitor, BranchManager, Employee];
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
         let deleted = null;
 
         for (const model of models) {

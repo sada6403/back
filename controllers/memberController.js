@@ -1,4 +1,6 @@
 const Member = require('../models/Member');
+const mongoose = require('mongoose');
+
 
 // @desc    Register a member
 // @route   POST /api/members
@@ -51,10 +53,10 @@ const registerMember = async (req, res, next) => {
         const newMember = new Member({
             name,
             address,
-            mobile,
+            contact: mobile,
+            memberId: memberCode || `MEM-${Date.now()}`,
             email,
             nic,
-            memberCode: memberCode || `MEM-${Date.now()}`,
             registrationData,
             fieldVisitorId: fvId,
             branchId
@@ -111,6 +113,7 @@ const getMembers = async (req, res) => {
         // If no user (unprotected access for Management IT), show all or filter via query
         let matchStage = {};
 
+        /*
         if (req.user) {
             matchStage.branchId = branchId;
             if (role === 'manager') {
@@ -121,6 +124,7 @@ const getMembers = async (req, res) => {
                 matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(userId);
             }
         }
+        */
         // If unauthenticated, we don't apply any strict filters by default unless passed in query
         if (queryFvId && !req.user) { // Allow manual filter even if not logged in
             matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(queryFvId);
@@ -159,9 +163,7 @@ const getMembers = async (req, res) => {
                             as: 'tx',
                             cond: {
                                 $and: [
-                                    { $eq: ['$$tx.type', 'buy'] },
-                                    { $eq: [{ $year: '$$tx.date' }, { $year: now }] },
-                                    { $eq: [{ $month: '$$tx.date' }, { $month: now }] }
+                                    { $eq: ['$$tx.type', 'buy'] }
                                 ]
                             }
                         }
@@ -172,9 +174,7 @@ const getMembers = async (req, res) => {
                             as: 'tx',
                             cond: {
                                 $and: [
-                                    { $eq: ['$$tx.type', 'sell'] },
-                                    { $eq: [{ $year: '$$tx.date' }, { $year: now }] },
-                                    { $eq: [{ $month: '$$tx.date' }, { $month: now }] }
+                                    { $eq: ['$$tx.type', 'sell'] }
                                 ]
                             }
                         }
@@ -238,6 +238,7 @@ const getMembers = async (req, res) => {
                     totalSellQuantity: 1,
                     totalSellQuantity: 1,
                     registeredAt: 1,
+                    joinedDate: 1, // Project joinedDate
                     registrationData: 1 // Add this to projection
                 }
             }
@@ -269,7 +270,7 @@ const getMembers = async (req, res) => {
             totalSellQuantity: m.totalSellQuantity || 0,
             totalBuyQuantity: m.totalBuyQuantity || 0,
             totalSellQuantity: m.totalSellQuantity || 0,
-            registeredAt: m.registeredAt,
+            registeredAt: m.joinedDate || m.registeredAt, // Prioritize joinedDate which we know is correct
             registrationData: m.registrationData || {} // Include registrationData
         }));
 
@@ -313,6 +314,8 @@ const updateMember = async (req, res) => {
     }
 };
 
+const Transaction = require('../models/Transaction'); // Ensure Transaction is imported at top if not keys
+
 // @desc    Delete member
 // @route   DELETE /api/members/:id
 // @access  Private/Manager
@@ -321,8 +324,11 @@ const deleteMember = async (req, res) => {
         const member = await Member.findById(req.params.id);
 
         if (member) {
+            // Delete associated transactions first
+            await Transaction.deleteMany({ memberId: member._id });
+            // Then delete the member
             await member.deleteOne();
-            res.json({ message: 'Member removed' });
+            res.json({ message: 'Member and their transactions removed' });
         } else {
             res.status(404);
             throw new Error('Member not found');

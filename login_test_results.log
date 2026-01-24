@@ -1,0 +1,24 @@
+
+--- Testing Role: "IT Sector" ---
+STATUS: 400
+ERROR BODY Start: {"success":false,"message":"Invalid role","stack":"Error: Invalid role\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:29:19)\n    at Layer.handle [as handle_request] (/home/ub
+
+--- Testing Role: "it_sector" ---
+STATUS: 400
+ERROR BODY Start: {"success":false,"message":"Invalid role","stack":"Error: Invalid role\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:29:19)\n    at Layer.handle [as handle_request] (/home/ub
+
+--- Testing Role: "admin" ---
+STATUS: 400
+ERROR BODY Start: {"success":false,"message":"Invalid role","stack":"Error: Invalid role\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:29:19)\n    at Layer.handle [as handle_request] (/home/ub
+
+--- Testing Role: "it" ---
+STATUS: 400
+ERROR BODY Start: {"success":false,"message":"Invalid role","stack":"Error: Invalid role\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:29:19)\n    at Layer.handle [as handle_request] (/home/ub
+
+--- Testing Role: "manager" ---
+STATUS: 401
+ERROR BODY Start: {"success":false,"message":"Invalid credentials","stack":"Error: Invalid credentials\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:58:19)\n    at process.processTicksAndRejec
+
+--- Testing Role: "field_visitor" ---
+STATUS: 401
+ERROR BODY Start: {"success":false,"message":"Invalid credentials","stack":"Error: Invalid credentials\n    at loginUser (/home/ubuntu/awsbacked/controllers/authController.js:58:19)\n    at process.processTicksAndRejec

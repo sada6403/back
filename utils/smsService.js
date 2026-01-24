@@ -1,50 +1,37 @@
-const https = require('https');
+const { runLoginTest } = require('./mobitelPuppet'); // Temporary import until fully implemented
+// Ideally: const mobitelPuppet = require('./mobitelPuppet');
 
-const sendSMS = (to, message) => {
-    return new Promise((resolve, reject) => {
-        const user = process.env.MOBITEL_USER;
-        const password = process.env.MOBITEL_PASSWORD;
-        const senderId = process.env.MOBITEL_SENDER_ID || 'Mobitel';
-
-        if (!user || !password) {
-            console.error("Mobitel Credentials missing");
-            return reject(new Error("Mobitel credentials missing in .env"));
-        }
-
-        // TRYING HTTP API (Legacy Standard)
-        // URL: https://msmsenterprise.mobitel.lk/http_api.php
-        // Standard Params: username, password, from, to, text
-
-        const queryString = `username=${encodeURIComponent(user)}&password=${encodeURIComponent(password)}&from=${encodeURIComponent(senderId)}&to=${encodeURIComponent(to)}&text=${encodeURIComponent(message)}`;
-        const url = `https://msmsenterprise.mobitel.lk/http_api.php?${queryString}`;
-
-        console.log(`Sending SMS to: ${url.replace(password, '******')}`); // Log URL for debugging (hide password)
-
-        https.get(url, (res) => {
-            let data = '';
-
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-
-            res.on('end', () => {
-                console.log(`Mobitel SMS Response code: ${res.statusCode}`);
-                console.log(`Mobitel SMS Response body: ${data}`);
-
-                if (res.statusCode === 200 && !data.includes('Error')) {
-                    resolve(data);
-                } else {
-                    // Even if 200, if bodu says "Error", we reject
-                    // But for now, let's just resolve to see the log
-                    resolve(data);
-                }
-            });
-
-        }).on('error', (err) => {
-            console.error("Error sending SMS:", err);
-            reject(err);
-        });
-    });
+const sendSMS = async (to, message) => {
+    try {
+        console.log(`Sending SMS to ${to} via Puppeteer...`);
+        // TODO: Implement single send in mobitelPuppet
+        // For now, use bulk logic with one number
+        const result = await sendBulk([to], message);
+        if (result.failed > 0) throw new Error(result.details[0].error);
+        return result;
+    } catch (error) {
+        console.error('SMS Service Error:', error.message);
+        throw error;
+    }
 };
 
-module.exports = { sendSMS };
+const sendBulk = async (numbers, message) => {
+    try {
+        // format numbers
+        const formattedNumbers = numbers.map(n => {
+            let num = n.toString().replace(/\D/g, '');
+            if (num.startsWith('0')) num = '94' + num.substring(1);
+            if (num.length === 9) num = '94' + num;
+            return num;
+        });
+
+        // Lazy load to avoid crash if install pending
+        const { sendBulkMessages } = require('./mobitelPuppet');
+        return await sendBulkMessages(formattedNumbers, message);
+    } catch (error) {
+        console.error('Bulk SMS Service Error:', error.message);
+        return { success: 0, failed: numbers.length, details: numbers.map(n => ({ number: n, status: 'failed', error: error.message })) };
+    }
+};
+
+module.exports = { sendSMS, sendBulk };

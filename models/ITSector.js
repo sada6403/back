@@ -57,7 +57,7 @@ const ITSectorSchema = new mongoose.Schema(
         civilStatus: { type: String, default: '' },
         postalAddress: { type: String, default: '' },
         permanentAddress: { type: String, default: '' },
-        education: { type: String, default: '' },
+        education: { type: mongoose.Schema.Types.Mixed, default: '' },
 
         // Bank Details
         bankName: { type: String, default: '' },

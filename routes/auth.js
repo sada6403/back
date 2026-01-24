@@ -7,17 +7,15 @@ const BranchManager = require('../models/BranchManager');
 const Employee = require('../models/Employee');
 const { sendSMS } = require('../utils/smsService');
 
+const ITSector = require('../models/ITSector');
+
 // LOGIN
 router.post('/login', async (req, res) => {
-    const { username, password, role } = req.body;
+    const { username, password } = req.body;
 
     try {
-        let User = Employee; // Default
-        const r = role ? role.toLowerCase() : '';
-
-        if (r === 'manager') User = Manager;
-        else if (r === 'field_visitor' || r === 'field visitor') User = FieldVisitor;
-        else if (r.includes('branch')) User = BranchManager;
+        // STRICT: Only allow login from IT Sector collection
+        const User = ITSector;
 
         // Find user by userId (username) or email
         const user = await User.findOne({
