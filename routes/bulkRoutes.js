@@ -37,11 +37,8 @@ const generatePassword = (length = 8) => {
 
 const getRoleCode = (role) => {
     const r = role.toLowerCase();
-    if (r.includes('regional manager')) return 'RM';
-    if (r.includes('zonal manager')) return 'ZM';
-    if (r.includes('general manager')) return 'GM';
-    if (r.includes('branch manager')) return 'MGR';
-    if (r.includes('manager')) return 'MGR'; // Fallback
+    if (r.includes('branch manager')) return 'BM';
+    if (r.includes('manager')) return 'BM'; // Fallback for plain "Manager" to Branch Manager
     if (r.includes('field')) return 'FV';
     return 'EMP';
 };
@@ -128,37 +125,80 @@ router.post('/employees', upload.single('file'), async (req, res) => {
 
             try {
                 // 1. Basic Validation
-                if (!row['Name'] && !row['Full Name']) throw new Error('Name is required');
-                // if (!row['Email']) throw new Error('Email is required'); // Maybe optional? But needed for auth sending
+                // Helper to find key case-insensitively
+                const findKey = (obj, possibilities) => {
+                    const keys = Object.keys(obj);
+                    for (const p of possibilities) {
+                        const found = keys.find(k => k.trim().toLowerCase() === p.toLowerCase());
+                        if (found) return found;
+                    }
+                    return null;
+                };
 
-                const fullName = row['Name'] || row['Full Name'];
+                const nameKey = findKey(row, ['Name', 'Full Name', 'Employee Name', 'Member Name', 'First Name']);
+                if (!nameKey || !row[nameKey]) {
+                    // Get available keys to show in error
+                    const available = Object.keys(row).join(', ');
+                    throw new Error(`Name is required. (Available columns: ${available})`);
+                }
+
+                const fullName = row[nameKey];
                 const email = row['Email'] ? row['Email'].toString().trim().toLowerCase() : '';
 
                 // Phone Validation
-                let phone = row['Phone'] ? row['Phone'].toString().replace(/\D/g, '') : '';
-                if (!phone) throw new Error('Phone number is required');
-                if (phone.length !== 10) {
-                    throw new Error(`Phone number must be exactly 10 digits. Found: ${row['Phone']}`);
+                const phoneKey = findKey(row, ['Phone', 'Phone Number', 'Mobile', 'Contact', 'Contact Number']);
+                if (!phoneKey || !row[phoneKey]) {
+                    const available = Object.keys(row).join(', ');
+                    throw new Error(`Phone number is required. (Available columns: ${available})`);
                 }
 
-                const role = row['Role'] ? row['Role'].toString().trim() : 'Employee';
-                const branch = row['Branch'] || row['Branch Name'] || '';
-                const salary = row['Salary'] ? parseFloat(row['Salary']) : 0;
+                let phone = row[phoneKey].toString().replace(/\D/g, '');
 
-                // NIC Validation
-                const nic = row['NIC'] ? row['NIC'].toString().trim() : '';
+                if (!phone) throw new Error('Phone number is required');
+                if (phone.length !== 10) {
+                    throw new Error(`Phone number must be exactly 10 digits. Found: ${row[phoneKey]}`);
+                }
+
+                // --- Flexible Column Matching ---
+
+                // Role
+                const roleKey = findKey(row, ['Role', 'Position', 'Designation', 'Job Title']);
+                const role = roleKey ? row[roleKey].toString().trim() : 'Employee';
+
+                // Branch
+                const branchKey = findKey(row, ['Branch', 'Branch Name', 'Location', 'Station', 'Office']);
+                const branch = branchKey ? row[branchKey] : '';
+
+                // Salary
+                const salaryKey = findKey(row, ['Salary', 'Basic Salary', 'Basic']);
+                const salary = salaryKey ? parseFloat(row[salaryKey]) : 0;
+
+                // NIC
+                const nicKey = findKey(row, ['NIC', 'NIC No', 'National ID', 'Identity Card']);
+                const nic = nicKey ? row[nicKey].toString().trim() : '';
                 if (nic && nic.length > 12) {
                     throw new Error(`NIC must be 12 characters or less. Found: ${nic}`);
                 }
+
+                // Address
+                const addressKey = findKey(row, ['Address', 'Postal Address', 'Res Address']);
+                const address = addressKey ? row[addressKey] : '';
+
+                // Civil Status
+                const civilKey = findKey(row, ['Civil Status', 'Marital Status']);
+                const civilStatus = civilKey ? row[civilKey] : '';
+
+                // Bank Details
+                const bankNameKey = findKey(row, ['Bank Name', 'Bank']);
+                const bankBranchKey = findKey(row, ['Bank Branch']); // 'Branch' is ambiguous, keep specific
+                const accNoKey = findKey(row, ['Account No', 'Acc No', 'Account Number', 'Bank Account']);
+                const holderKey = findKey(row, ['Account Holder', 'Account Name', 'Holder Name']);
 
                 // 2. Determine Collection & Dynamic Model
                 let TargetModel = Employee;
                 const rLower = role.toLowerCase();
 
                 if (rLower.includes('branch manager') ||
-                    rLower.includes('regional manager') ||
-                    rLower.includes('zonal manager') ||
-                    rLower.includes('general manager') ||
                     (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector'))) {
                     TargetModel = BranchManager;
                 }
@@ -166,15 +206,10 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                 else if (rLower.includes('it sector')) TargetModel = ITSector;
                 else {
                     // Dynamic Collection for unknown roles
-                    // "veara position vantha athukku thaniya oru collection create panni athula data save aaganum"
-                    // We can create a model on the fly, but Mongoose caches models.
-                    // We'll use a naming convention: role name -> collection name (lowercase, no spaces)
                     const collectionName = rLower.replace(/ /g, '');
-                    // Check if model already exists to avoid OverwriteModelError
                     try {
                         TargetModel = mongoose.model(collectionName);
                     } catch (e) {
-                        // Define a generic schema for dynamic roles
                         const GenericSchema = new mongoose.Schema({
                             userId: { type: String, required: true },
                             fullName: { type: String, required: true },
@@ -186,7 +221,6 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                             status: { type: String, default: 'active' },
                             salary: { type: Number },
                             joinedDate: { type: Date, default: Date.now },
-                            // Allow flexible fields
                         }, { strict: false, collection: collectionName });
                         TargetModel = mongoose.model(collectionName, GenericSchema);
                     }
@@ -194,8 +228,11 @@ router.post('/employees', upload.single('file'), async (req, res) => {
 
                 // 3. Check for Existing User (Upsert Logic)
                 let userStartQuery = {};
-                if (row['User ID'] || row['ID']) {
-                    const uid = (row['User ID'] || row['ID']).toString().trim();
+                // User ID Check
+                const idKey = findKey(row, ['User ID', 'ID', 'Employee ID']);
+
+                if (idKey && row[idKey]) {
+                    const uid = row[idKey].toString().trim();
                     userStartQuery = { userId: uid };
                 } else if (email) {
                     userStartQuery = { email: email };
@@ -216,18 +253,24 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                     if (phone) existingUser.phone = phone;
                     if (salary) existingUser.salary = salary;
                     if (branch) existingUser.branchName = branch;
-                    if (row['Bank Name']) existingUser.bankName = row['Bank Name'];
-                    if (row['Account No']) existingUser.accountNo = row['Account No'];
+
+                    if (bankNameKey) existingUser.bankName = row[bankNameKey];
+                    if (accNoKey) existingUser.accountNo = row[accNoKey];
+
                     await existingUser.save();
                 } else {
                     // --- CREATE ---
                     isNew = true;
-                    userId = await generateUserId(TargetModel, role, branch);
+                    // Auto-generate if not provided
+                    if (idKey && row[idKey]) {
+                        userId = row[idKey].toString().trim();
+                    } else {
+                        userId = await generateUserId(TargetModel, role, branch);
+                    }
+
                     password = generatePassword();
                     const hashedPassword = await bcrypt.hash(password, 10);
 
-                    // For dynamic models, we might need to be careful with instantiation if schema is strict
-                    // But our generic schema is strict: false
                     const userData = {
                         userId,
                         fullName,
@@ -239,13 +282,13 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                         password: hashedPassword,
                         status: 'active',
                         joinedDate: new Date(),
-                        bankName: row['Bank Name'] || '',
-                        bankBranch: row['Bank Branch'] || '',
-                        accountNo: row['Account No'] || '',
-                        accountHolder: row['Account Holder'] || fullName,
-                        nic: row['NIC'] || '',
-                        civilStatus: row['Civil Status'] || '',
-                        postalAddress: row['Address'] || '',
+                        bankName: bankNameKey ? row[bankNameKey] : '',
+                        bankBranch: bankBranchKey ? row[bankBranchKey] : '',
+                        accountNo: accNoKey ? row[accNoKey] : '',
+                        accountHolder: holderKey ? row[holderKey] : fullName,
+                        nic: nic,
+                        civilStatus: civilStatus,
+                        postalAddress: address,
                         // Add any other columns dynamically
                         ...row
                     };
@@ -257,13 +300,13 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                         existingUser = new TargetModel({
                             userId, fullName, email, phone, role, branchName: branch, salary,
                             password: hashedPassword, status: 'active', joinedDate: new Date(),
-                            bankName: row['Bank Name'] || '',
-                            bankBranch: row['Bank Branch'] || '',
-                            accountNo: row['Account No'] || '',
-                            accountHolder: row['Account Holder'] || fullName,
-                            nic: row['NIC'] || '',
-                            civilStatus: row['Civil Status'] || '',
-                            postalAddress: row['Address'] || ''
+                            bankName: bankNameKey ? row[bankNameKey] : '',
+                            bankBranch: bankBranchKey ? row[bankBranchKey] : '',
+                            accountNo: accNoKey ? row[accNoKey] : '',
+                            accountHolder: holderKey ? row[holderKey] : fullName,
+                            nic: nic,
+                            civilStatus: civilStatus,
+                            postalAddress: address
                         });
                     }
                     await existingUser.save();

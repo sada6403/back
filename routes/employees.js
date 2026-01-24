@@ -42,11 +42,8 @@ const getBranchCode = (branchName) => {
 // Helper to get Role Code
 const getRoleCode = (role) => {
     const r = role.toLowerCase();
-    if (r.includes('regional manager')) return 'RM';
-    if (r.includes('zonal manager')) return 'ZM';
-    if (r.includes('general manager')) return 'GM';
-    if (r.includes('branch manager')) return 'MGR';
-    if (r.includes('manager')) return 'MGR';
+    if (r.includes('branch manager')) return 'BM';
+    if (r.includes('manager')) return 'BM';
     if (r.includes('field')) return 'FV';
     return 'EMP';
 };
@@ -137,9 +134,6 @@ router.post('/', async (req, res) => {
         const rLower = role.toLowerCase();
 
         if (rLower.includes('branch manager') ||
-            rLower.includes('regional manager') ||
-            rLower.includes('zonal manager') ||
-            rLower.includes('general manager') ||
             (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector'))) {
             TargetModel = BranchManager;
         }
