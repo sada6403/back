@@ -4,7 +4,7 @@ const ITSector = require('../models/ITSector');
 // const Admin = require('../models/Admin'); // Admin is now ITSector
 const generateToken = require('../utils/generateToken');
 const { createAndSendOTP, verifyOTP } = require('../utils/otpService');
-const { sendPasswordChangeEmail, sendPasswordResetEmail } = require('../utils/emailService');
+const { sendPasswordChangeEmail, sendPasswordResetEmail, sendEmail } = require('../utils/emailService');
 
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
@@ -79,7 +79,13 @@ const loginUser = async (req, res, next) => {
 // @access  Public (or Private depending on your requirements)
 const registerManager = async (req, res, next) => {
     try {
-        let { fullName, email, password, userId, branchName, branchId, phone } = req.body;
+        let { fullName, email, password, userId, branchName, branchId, phone, role } = req.body;
+
+        // Default role if not provided
+        if (!role) role = 'branch_manager';
+
+        // Normalize role
+        const rLower = role.toLowerCase();
 
         // Validate required fields
         if (!fullName || !email || !password) {
@@ -95,47 +101,136 @@ const registerManager = async (req, res, next) => {
             userId = req.body.userId;
         }
 
+        // Determine Model based on Role
+        let TargetModel = BranchManager; // Default
+
+        // If role IS strict 'branch manager' or 'manager', use BranchManager
+        // If it is 'Regional Manager', 'Zonal Manager', 'General Manager' -> separate collection
+        if (rLower === 'branch manager' || rLower === 'branch_manager' || rLower === 'manager') {
+            TargetModel = BranchManager;
+        } else {
+            // Dynamic Collection
+            const collectionName = rLower.replace(/ /g, ''); // e.g. "regionalmanager"
+            try {
+                TargetModel = mongoose.model(collectionName);
+            } catch (e) {
+                const GenericSchema = new mongoose.Schema({
+                    userId: { type: String, required: true },
+                    fullName: { type: String, required: true },
+                    email: { type: String },
+                    phone: { type: String },
+                    role: { type: String },
+                    branchName: { type: String },
+                    branchId: { type: String },
+                    password: { type: String },
+                    status: { type: String, default: 'active' },
+                    joinedDate: { type: Date, default: Date.now },
+                }, { strict: false, collection: collectionName });
+                TargetModel = mongoose.model(collectionName, GenericSchema);
+            }
+        }
+
         // Check if manager already exists
-        const managerExists = await BranchManager.findOne({
+        const managerExists = await TargetModel.findOne({
             $or: [{ email }, { userId }]
         });
         if (managerExists) {
             return res.status(400).json({
                 success: false,
-                message: 'Manager with this email or userId already exists'
+                message: `${role} with this email or userId already exists`
             });
         }
 
         // Create new manager instance
-        const newManager = new BranchManager({
-            fullName,
-            email,
-            password,
-            userId,
-            branchName: branchName || 'Kalmunai',
-            branchId: branchId || 'branch-default',
-            phone: phone || '',
-            role: 'branch_manager',
-            status: 'active'
-        });
+        // If dynamic model, we use generic constructor
+        let newManager;
+        if (TargetModel === BranchManager) {
+            newManager = new BranchManager({
+                fullName,
+                email,
+                password,
+                userId,
+                branchName: branchName || 'Kalmunai',
+                branchId: branchId || 'branch-default',
+                phone: phone || '',
+                role: 'branch_manager',
+                status: 'active'
+            });
+        } else {
+            // Generic / Dynamic
+            const hashedPassword = await require('bcryptjs').hash(password, 10); // Hash manually for generic if schema hooks missing
+            // Wait, if I defined schema above, I didn't add pre-save hook.
+            // But existing BranchManager has pre-save.
+            // I should manually hash for dynamic models to be safe.
 
-        // Await the save operation properly (password will be hashed by pre-save hook)
+            newManager = new TargetModel({
+                fullName,
+                email,
+                userId,
+                branchName: branchName || 'Head Office',
+                branchId: branchId || 'ho-default',
+                phone: phone || '',
+                role: role,
+                status: 'active',
+                password: hashedPassword // Save hashed
+            });
+        }
+
+        // Await the save operation properly (password will be hashed by pre-save hook for BranchManager)
         const savedManager = await newManager.save();
+
+        // Send Welcome Email
+        if (email) {
+            const html = `
+                <div style="font-family: Arial, sans-serif; color: #333;">
+                    <div style="background-color: #2e7d32; padding: 20px; text-align: center;">
+                         <h1 style="color: white; margin: 0;">Welcome to Nature Farming</h1>
+                    </div>
+                    <div style="padding: 20px; border: 1px solid #ddd; border-top: none;">
+                        <p>Dear ${fullName},</p>
+                        <p>You have been successfully registered as a ${role}.</p>
+                        <p><strong>Your Credentials:</strong></p>
+                        <ul>
+                            <li><strong>User ID:</strong> ${userId}</li>
+                            <li><strong>Password:</strong> ${password}</li>
+                        </ul>
+                        <p>Please keep these credentials safe.</p>
+
+                        <div style="background-color: #e8f5e9; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                            <p style="margin-top: 0; color: #1b5e20;"><strong>Mandatory Action Required:</strong></p>
+                            <p>Please download and review the following document:</p>
+                            <a href="https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=sharing" 
+                               style="background-color: #2e7d32; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                               Download Training Details
+                            </a>
+                        </div>
+                        
+                        <p>Best Regards,<br>Nature Farming Team</p>
+                    </div>
+                </div>
+            `;
+            try {
+                await sendEmail(email, 'Welcome to Nature Farming - Credentials', html);
+            } catch (err) {
+                console.error('Failed to send manager welcome email', err);
+            }
+        }
 
         // Return the saved document immediately with consistent field names
         res.status(201).json({
             success: true,
-            message: 'Manager registered successfully',
+            message: `${role} registered successfully`,
             data: {
-                id: savedManager._id.toString(), // Use 'id' for Flutter compatibility
+                id: savedManager._id.toString(),
                 _id: savedManager._id,
                 name: savedManager.fullName,
                 email: savedManager.email,
                 code: savedManager.userId,
-                role: 'manager',
+                role: role,
                 branchId: savedManager.branchId,
                 phone: savedManager.phone,
-                token: generateToken(savedManager._id, 'manager', savedManager.branchId)
+                // Generate token mostly useful if they can login, assume they can
+                token: generateToken(savedManager._id, role, savedManager.branchId)
             }
         });
     } catch (error) {

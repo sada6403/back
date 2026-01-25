@@ -144,13 +144,22 @@ const registerFieldVisitor = async (req, res, next) => {
                     <div style="padding: 20px; border: 1px solid #ddd; border-top: none;">
                         <p>Dear ${name},</p>
                         <p>You have been successfully registered as a Field Visitor.</p>
-                        <p><strong>Your Credentails:</strong></p>
+                        <p><strong>Your Credentials:</strong></p>
                         <ul>
                             <li><strong>User ID:</strong> ${generatedUserId}</li>
                             <li><strong>Password:</strong> ${generatedPassword}</li>
                         </ul>
                         <p>Please keep these credentials safe.</p>
-                        <br>
+                        
+                        <div style="background-color: #e8f5e9; padding: 15px; margin: 20px 0; border-radius: 5px;">
+                            <p style="margin-top: 0; color: #1b5e20;"><strong>Mandatory Action Required:</strong></p>
+                            <p>Please download and review the following document:</p>
+                            <a href="https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=sharing" 
+                               style="background-color: #2e7d32; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                               Download Training Details
+                            </a>
+                        </div>
+
                         <p>Best Regards,<br>Nature Farming Team</p>
                     </div>
                 </div>

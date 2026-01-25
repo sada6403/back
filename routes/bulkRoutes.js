@@ -198,8 +198,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                 let TargetModel = Employee;
                 const rLower = role.toLowerCase();
 
-                if (rLower.includes('branch manager') ||
-                    (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector'))) {
+                if (rLower === 'branch manager' || rLower === 'branch_manager') {
                     TargetModel = BranchManager;
                 }
                 else if (rLower.includes('field visitor')) TargetModel = FieldVisitor;
@@ -259,7 +258,7 @@ router.post('/employees', upload.single('file'), async (req, res) => {
 
                     await existingUser.save();
                 } else {
-                    // --- CREATE ---
+                    // --- CREATE OR UPDATE ON DUPLICATE ---
                     isNew = true;
                     // Auto-generate if not provided
                     if (idKey && row[idKey]) {
@@ -293,23 +292,55 @@ router.post('/employees', upload.single('file'), async (req, res) => {
                         ...row
                     };
 
-                    if (TargetModel.schema && TargetModel.schema.options.strict === false) {
-                        existingUser = new TargetModel(userData);
-                    } else {
-                        // Known models
-                        existingUser = new TargetModel({
-                            userId, fullName, email, phone, role, branchName: branch, salary,
-                            password: hashedPassword, status: 'active', joinedDate: new Date(),
-                            bankName: bankNameKey ? row[bankNameKey] : '',
-                            bankBranch: bankBranchKey ? row[bankBranchKey] : '',
-                            accountNo: accNoKey ? row[accNoKey] : '',
-                            accountHolder: holderKey ? row[holderKey] : fullName,
-                            nic: nic,
-                            civilStatus: civilStatus,
-                            postalAddress: address
-                        });
+                    try {
+                        if (TargetModel.schema && TargetModel.schema.options.strict === false) {
+                            existingUser = new TargetModel(userData);
+                        } else {
+                            // Known models
+                            existingUser = new TargetModel({
+                                userId, fullName, email, phone, role, branchName: branch, salary,
+                                password: hashedPassword, status: 'active', joinedDate: new Date(),
+                                bankName: bankNameKey ? row[bankNameKey] : '',
+                                bankBranch: bankBranchKey ? row[bankBranchKey] : '',
+                                accountNo: accNoKey ? row[accNoKey] : '',
+                                accountHolder: holderKey ? row[holderKey] : fullName,
+                                nic: nic,
+                                civilStatus: civilStatus,
+                                postalAddress: address
+                            });
+                        }
+                        await existingUser.save();
+                    } catch (saveError) {
+                        // Handle Duplicate Key Error (E11000)
+                        if (saveError.code === 11000) {
+                            console.warn(`Duplicate key found for row ${rowIndex}. Attempting update...`);
+                            // Identify the duplicate key
+                            const key = Object.keys(saveError.keyValue)[0];
+                            const value = saveError.keyValue[key];
+
+                            // Find record by that key
+                            const duplicateRecord = await TargetModel.findOne({ [key]: value });
+                            if (duplicateRecord) {
+                                // Update logic
+                                duplicateRecord.fullName = fullName;
+                                duplicateRecord.phone = phone; // Assuming we want to overwrite
+                                if (salary) duplicateRecord.salary = salary;
+                                if (branch) duplicateRecord.branchName = branch;
+                                if (bankNameKey && row[bankNameKey]) duplicateRecord.bankName = row[bankNameKey];
+                                if (accNoKey && row[accNoKey]) duplicateRecord.accountNo = row[accNoKey];
+                                if (address) duplicateRecord.postalAddress = address;
+                                if (nic) duplicateRecord.nic = nic;
+
+                                await duplicateRecord.save();
+                                isNew = false; // It was an update
+                                console.log(`Row ${rowIndex} updated successfully after duplicate check.`);
+                            } else {
+                                throw saveError; // Should not happen if key violation exists
+                            }
+                        } else {
+                            throw saveError;
+                        }
                     }
-                    await existingUser.save();
                 }
 
                 // 4. Send Email (HTML Template)
