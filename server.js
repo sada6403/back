@@ -32,9 +32,10 @@ try {
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true
     }));
-    app.use(cors({ origin: "*"}));
+    app.use(cors({ origin: "*" }));
     app.use(express.json());
     app.use('/bills', express.static(path.join(__dirname, 'public', 'bills')));
+    app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
     app.use((req, res, next) => {
         console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -56,6 +57,14 @@ try {
     app.use('/api/analysis', require('./routes/analysisRoutes'));
 
     app.get('/', (req, res) => res.send('API Running'));
+
+    // 404 Handler for undefined routes (Returns JSON)
+    app.use((req, res, next) => {
+        res.status(404).json({
+            success: false,
+            message: `Route not found: ${req.method} ${req.originalUrl}`
+        });
+    });
 
     app.use(errorHandler);
 

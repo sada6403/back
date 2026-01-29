@@ -168,85 +168,64 @@ router.post('/', async (req, res) => {
         const branchCode = getBranchCode(branchName);
 
         // 3. Generate ID (Logic from bulkRoutes)
-        const prefix = `${roleCode}-${branchCode}-`;
+        let finalUserId = req.body.userId;
+        let finalBranchId = req.body.branchId;
 
-        // Find the latest user with this prefix to increment
-        // Use collation for numeric sorting if possible, or just sort textually and hope for best (or fetch all and sort in memory if needed, but regex sort usually okay for fixed width)
-        // Note: bulkRoutes uses collation numericOrdering: true. Let's try to match that if Mongo supports it here.
+        if (!finalUserId) {
+            const prefix = `${roleCode}-${branchCode}-`;
+            const lastUser = await TargetModel.findOne({ userId: new RegExp(`^${prefix}`) })
+                .sort({ userId: -1 })
+                .collation({ locale: 'en_US', numericOrdering: true });
 
-        const lastUser = await TargetModel.findOne({ userId: new RegExp(`^${prefix}`) })
-            .sort({ userId: -1 })
-            .collation({ locale: 'en_US', numericOrdering: true });
-
-        let nextNum = 1;
-        if (lastUser && lastUser.userId) {
-            const parts = lastUser.userId.split('-');
-            const numPart = parts[parts.length - 1]; // 000001
-            if (!isNaN(numPart)) {
-                nextNum = parseInt(numPart) + 1;
+            let nextNum = 1;
+            if (lastUser && lastUser.userId) {
+                const parts = lastUser.userId.split('-');
+                const numPart = parts[parts.length - 1]; // 000
+                if (!isNaN(numPart)) {
+                    nextNum = parseInt(numPart) + 1;
+                }
+            }
+            finalUserId = `${prefix}${String(nextNum).padStart(3, '0')}`;
+            if (!finalBranchId) {
+                finalBranchId = `branch-${branchCode}-${String(nextNum).padStart(3, '0')}`;
             }
         }
 
-        const userId = `${prefix}${String(nextNum).padStart(3, '0')}`;
-        // branchId logic: Keep old style or update? Old was "branch-KM-001".
-        // Let's keep it simply consistent or just reuse userId logic if used for auth.
-        // But schema has branchId. Let's make it consistent.
-        const branchId = `branch-${branchCode}-${String(nextNum).padStart(3, '0')}`;
-
         // 4. Generate Password
-        const plainPassword = generatePassword(8);
-        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+        let finalHashedPassword;
+        let plainPassword = req.body.password;
+        if (plainPassword) {
+            finalHashedPassword = await bcrypt.hash(plainPassword, 10);
+        } else {
+            plainPassword = generatePassword(8);
+            finalHashedPassword = await bcrypt.hash(plainPassword, 10);
+        }
 
         // 5. Create Employee Object
-        // Using generic object structure to support dynamic models
         const userData = {
-            userId,
-            fullName,
-            email,
-            phone,
-            dob,
-            role,
+            ...req.body,
+            userId: finalUserId,
+            branchId: finalBranchId || req.body.branchId,
+            password: finalHashedPassword,
             position: role,
-            branchName,
-            branchId,
-            salary,
-            password: hashedPassword,
-            status: 'active',
-            joinedDate: joinedDate || new Date(),
-            bankName,
-            bankBranch,
-            accountNo,
-            accountHolder,
-            assignedArea,
-            nic,
-            civilStatus,
-            gender,
-            postalAddress,
-            permanentAddress,
-            education,
-            workExperience,
-            references
+            joinedDate: req.body.joinedDate || new Date(),
+            status: req.body.status || 'active'
         };
 
-        let newEmployee;
-        if (TargetModel.schema && TargetModel.schema.options.strict === false) {
-            newEmployee = new TargetModel(userData);
-        } else {
-            // Explicit for known models
-            newEmployee = new TargetModel({
-                userId, fullName, email, phone, dob, role, position: role,
-                branchName, branchId, salary, password: hashedPassword, status: 'active',
-                joinedDate: joinedDate || new Date(),
-                bankName, bankBranch, accountNo, accountHolder, assignedArea,
-                nic, civilStatus, gender, postalAddress, permanentAddress,
-                education, workExperience, references
+        const newEmployee = new TargetModel(userData);
+        await newEmployee.save();
+
+        // 6. Audit Log
+        if (req.user) {
+            await AuditService.log({
+                userId: req.user.userId,
+                action: 'ADD_EMPLOYEE',
+                details: `Added new ${role}: ${fullName} (${finalUserId})`,
+                timestamp: new Date()
             });
         }
 
-        const savedEmployee = await newEmployee.save();
-
-        // 6. Send Email (HTML)
-        // Reusing the HTML template logic from bulkRoutes would be ideal, but let's inline it for now or make it a shared helper later.
+        // 7. Send Email (HTML)
         // For now, I'll update it to be HTML to match the bulk upload experience.
         if (email) {
             const startLink = "https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=drive_link";
@@ -367,6 +346,123 @@ router.delete('/:id', async (req, res) => {
         }
         res.json({ message: 'Employee deleted' });
     } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// POST reset password for a specific employee
+router.post('/reset-password/:id', async (req, res) => {
+    try {
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
+        let employee = null;
+        let usedModel = null;
+
+        // Find the employee across all collections
+        for (const model of models) {
+            employee = await model.findOne({ userId: req.params.id });
+            if (employee) {
+                usedModel = model;
+                break;
+            }
+        }
+
+        // Fallback to _id search
+        if (!employee) {
+            for (const model of models) {
+                employee = await model.findById(req.params.id);
+                if (employee) {
+                    usedModel = model;
+                    break;
+                }
+            }
+        }
+
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        // Generate new password
+        const plainPassword = generatePassword(8);
+        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+        // Update password in database using findOneAndUpdate to bypass validation of other fields
+        const updatedEmployee = await usedModel.findOneAndUpdate(
+            { userId: req.params.id },
+            { $set: { password: hashedPassword } },
+            { new: true }
+        );
+
+        if (!updatedEmployee) {
+            // Try by _id fallback if userId was used to find it but findOneAndUpdate failed (unlikely if found)
+            await usedModel.findByIdAndUpdate(req.params.id, { $set: { password: hashedPassword } });
+        }
+
+        // Send email with new password
+        if (employee.email) {
+            const startLink = "https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=drive_link";
+            const htmlContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #1F2937; padding: 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0;">Nature Farming</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: #ffffff;">
+                        <h2 style="color: #333333; margin-top: 0;">Password Reset</h2>
+                        <p style="color: #555555; line-height: 1.6;">
+                            Hello ${employee.fullName},
+                        </p>
+                        <p style="color: #555555; line-height: 1.6;">
+                            Your password has been reset successfully. Here are your new login credentials:
+                        </p>
+                        
+                        <div style="background-color: #f8f9fa; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
+                            <p style="margin: 5px 0;"><strong>User ID:</strong> ${employee.userId}</p>
+                            <p style="margin: 5px 0;"><strong>New Password:</strong> ${plainPassword}</p>
+                            <p style="margin: 5px 0;"><strong>Role:</strong> ${employee.role}</p>
+                            <p style="margin: 5px 0;"><strong>Branch:</strong> ${employee.branchName}</p>
+                        </div>
+                        
+                        <p style="color: #555555; line-height: 1.6;">
+                            Please click the button below to access the application:
+                        </p>
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${startLink}" style="background-color: #4CAF50; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Login Now</a>
+                        </div>
+                        
+                        <p style="color: #888888; font-size: 12px; line-height: 1.6;">
+                            For security reasons, please change your password after logging in.
+                        </p>
+                    </div>
+                    <div style="background-color: #f1f1f1; padding: 15px; text-align: center;">
+                        <p style="color: #888888; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Nature Farming. All rights reserved.</p>
+                    </div>
+                </div>
+            `;
+
+            const mailOptions = {
+                from: process.env.EMAIL_USER || 'abisivan1827@gmail.com',
+                to: employee.email,
+                subject: 'Password Reset - Nature Farming',
+                html: htmlContent
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.log('Error sending email:', error);
+                } else {
+                    console.log('Email sent: ' + info.response);
+                }
+            });
+        }
+
+        res.json({
+            message: 'Password reset successful. New password sent to email.',
+            userId: employee.userId,
+            email: employee.email
+        });
+
+    } catch (err) {
+        console.error('Error resetting password:', err);
         res.status(500).json({ message: err.message });
     }
 });

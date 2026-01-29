@@ -8,11 +8,15 @@ const ProductSchema = new mongoose.Schema({
 
     name: { type: String, required: true },
     description: { type: String, default: '' },
-    price: { type: Number, required: true }, // Selling price
-    cost: { type: Number, required: true }, // Buying cost
+    defaultPrice: { type: Number, required: true }, // Selling price
+    buyingPrice: { type: Number, required: true }, // Buying cost
+    unit: { type: String, default: 'Kg' },
+    productId: { type: String }, // Optional custom ID
     images: [{ type: String }], // Array of image paths/URLs
     soldPerMonth: { type: Number, default: 0 },
     boughtPerMonth: { type: Number, default: 0 },
+    totalSoldValue: { type: Number, default: 0 },
+    totalBoughtValue: { type: Number, default: 0 },
     currentStock: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now }
 });
