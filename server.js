@@ -56,6 +56,12 @@ try {
     app.use('/api/employees', employeeRoutes);
     app.use('/api/analysis', require('./routes/analysisRoutes'));
 
+    app.get('/api/ping', (req, res) => res.json({
+        success: true,
+        message: 'Backend is live and updated',
+        time: new Date().toISOString()
+    }));
+
     app.get('/', (req, res) => res.send('API Running'));
 
     // API 404 Handler (JSON only)
