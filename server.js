@@ -32,7 +32,6 @@ try {
         allowedHeaders: ['Content-Type', 'Authorization'],
         credentials: true
     }));
-    app.use(cors({ origin: "*" }));
     app.use(express.json());
     app.use('/bills', express.static(path.join(__dirname, 'public', 'bills')));
     app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
@@ -56,6 +55,7 @@ try {
     app.use('/api/employees', employeeRoutes);
     app.use('/api/analysis', require('./routes/analysisRoutes'));
 
+    // API Ping (Diagnostic)
     app.get('/api/ping', (req, res) => res.json({
         success: true,
         message: 'Backend is live and updated',
@@ -64,17 +64,17 @@ try {
 
     app.get('/', (req, res) => res.send('API Running'));
 
-    // API 404 Handler (JSON only)
+    // Global API 404 Handler (MUST BE AFTER ALL ROUTES)
     app.use('/api', (req, res) => {
         res.status(404).json({
             success: false,
             message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
-            path: req.originalUrl
+            error: 'Not Found'
         });
     });
 
-    // General 404 Handler for undefined routes (Returns JSON)
-    app.use((req, res, next) => {
+    // General fallback 404
+    app.use((req, res) => {
         res.status(404).json({
             success: false,
             message: `Route not found: ${req.method} ${req.originalUrl}`

@@ -351,15 +351,16 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST reset password for a specific employee
-router.post('/reset-password/:id', async (req, res) => {
+router.post('/reset-password/:employeeId', async (req, res) => {
     try {
+        const id = req.params.employeeId;
         const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
         let employee = null;
         let usedModel = null;
 
         // Find the employee across all collections
         for (const model of models) {
-            employee = await model.findOne({ userId: req.params.id });
+            employee = await model.findOne({ userId: id });
             if (employee) {
                 usedModel = model;
                 break;
@@ -369,33 +370,30 @@ router.post('/reset-password/:id', async (req, res) => {
         // Fallback to _id search
         if (!employee) {
             for (const model of models) {
-                employee = await model.findById(req.params.id);
-                if (employee) {
-                    usedModel = model;
-                    break;
+                if (mongoose.Types.ObjectId.isValid(id)) {
+                    employee = await model.findById(id);
+                    if (employee) {
+                        usedModel = model;
+                        break;
+                    }
                 }
             }
         }
 
         if (!employee) {
-            return res.status(404).json({ message: 'Employee not found' });
+            return res.status(404).json({ success: false, message: 'Employee not found' });
         }
 
         // Generate new password
         const plainPassword = generatePassword(8);
         const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
-        // Update password in database using findOneAndUpdate to bypass validation of other fields
+        // Update password in database
         const updatedEmployee = await usedModel.findOneAndUpdate(
-            { userId: req.params.id },
+            { userId: employee.userId },
             { $set: { password: hashedPassword } },
             { new: true }
         );
-
-        if (!updatedEmployee) {
-            // Try by _id fallback if userId was used to find it but findOneAndUpdate failed (unlikely if found)
-            await usedModel.findByIdAndUpdate(req.params.id, { $set: { password: hashedPassword } });
-        }
 
         // Send email with new password
         if (employee.email) {
@@ -407,31 +405,19 @@ router.post('/reset-password/:id', async (req, res) => {
                     </div>
                     <div style="padding: 30px; background-color: #ffffff;">
                         <h2 style="color: #333333; margin-top: 0;">Password Reset</h2>
-                        <p style="color: #555555; line-height: 1.6;">
-                            Hello ${employee.fullName},
-                        </p>
-                        <p style="color: #555555; line-height: 1.6;">
-                            Your password has been reset successfully. Here are your new login credentials:
-                        </p>
-                        
+                        <p style="color: #555555; line-height: 1.6;">Hello ${employee.fullName},</p>
+                        <p style="color: #555555; line-height: 1.6;">Your password has been reset successfully. Here are your new login credentials:</p>
                         <div style="background-color: #f8f9fa; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
                             <p style="margin: 5px 0;"><strong>User ID:</strong> ${employee.userId}</p>
                             <p style="margin: 5px 0;"><strong>New Password:</strong> ${plainPassword}</p>
                             <p style="margin: 5px 0;"><strong>Role:</strong> ${employee.role}</p>
                             <p style="margin: 5px 0;"><strong>Branch:</strong> ${employee.branchName}</p>
                         </div>
-                        
-                        <p style="color: #555555; line-height: 1.6;">
-                            Please click the button below to access the application:
-                        </p>
-                        
+                        <p style="color: #555555; line-height: 1.6;">Please click the button below to access the application:</p>
                         <div style="text-align: center; margin: 30px 0;">
                             <a href="${startLink}" style="background-color: #4CAF50; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Login Now</a>
                         </div>
-                        
-                        <p style="color: #888888; font-size: 12px; line-height: 1.6;">
-                            For security reasons, please change your password after logging in.
-                        </p>
+                        <p style="color: #888888; font-size: 12px; line-height: 1.6;">For security reasons, please change your password after logging in.</p>
                     </div>
                     <div style="background-color: #f1f1f1; padding: 15px; text-align: center;">
                         <p style="color: #888888; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Nature Farming. All rights reserved.</p>
@@ -447,18 +433,16 @@ router.post('/reset-password/:id', async (req, res) => {
             };
 
             transporter.sendMail(mailOptions, (error, info) => {
-                if (error) {
-                    console.log('Error sending email:', error);
-                } else {
-                    console.log('Email sent: ' + info.response);
-                }
+                if (error) console.log('Error sending email:', error);
+                else console.log('Email sent: ' + info.response);
             });
         }
 
-        res.json({
+        res.status(200).json({
+            success: true,
             message: 'Password reset successful. New password sent to email.',
-            userId: employee.userId,
-            email: employee.email
+            employeeId: employee.userId,
+            newPassword: plainPassword
         });
 
     } catch (err) {
