@@ -58,7 +58,16 @@ try {
 
     app.get('/', (req, res) => res.send('API Running'));
 
-    // 404 Handler for undefined routes (Returns JSON)
+    // API 404 Handler (JSON only)
+    app.use('/api', (req, res) => {
+        res.status(404).json({
+            success: false,
+            message: `API endpoint not found: ${req.method} ${req.originalUrl}`,
+            path: req.originalUrl
+        });
+    });
+
+    // General 404 Handler for undefined routes (Returns JSON)
     app.use((req, res, next) => {
         res.status(404).json({
             success: false,
