@@ -241,10 +241,10 @@ router.post('/', async (req, res) => {
                         </p>
                         
                         <div style="background-color: #f8f9fa; border-left: 4px solid #4CAF50; padding: 15px; margin: 20px 0;">
-                            <p style="margin: 5px 0;"><strong>User ID:</strong> ${userId}</p>
+                            <p style="margin: 5px 0;"><strong>User ID:</strong> ${finalUserId}</p>
                             <p style="margin: 5px 0;"><strong>Password:</strong> ${plainPassword}</p>
                             <p style="margin: 5px 0;"><strong>Role:</strong> ${role}</p>
-                            <p style="margin: 5px 0;"><strong>Branch:</strong> ${branchName}</p>
+                            <p style="margin: 5px 0;"><strong>Branch:</strong> ${branchName || assignedArea || 'N/A'}</p>
                         </div>
                         
                         <p style="color: #555555; line-height: 1.6;">
@@ -411,7 +411,7 @@ router.post('/reset-password/:employeeId', async (req, res) => {
                             <p style="margin: 5px 0;"><strong>User ID:</strong> ${employee.userId}</p>
                             <p style="margin: 5px 0;"><strong>New Password:</strong> ${plainPassword}</p>
                             <p style="margin: 5px 0;"><strong>Role:</strong> ${employee.role}</p>
-                            <p style="margin: 5px 0;"><strong>Branch:</strong> ${employee.branchName}</p>
+                            <p style="margin: 5px 0;"><strong>Branch:</strong> ${employee.branchName || employee.assignedArea || 'N/A'}</p>
                         </div>
                         <p style="color: #555555; line-height: 1.6;">Please click the button below to access the application:</p>
                         <div style="text-align: center; margin: 30px 0;">
