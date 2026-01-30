@@ -49,13 +49,23 @@ const getRoleCode = (role) => {
 };
 
 // Helper to generate Password
-const generatePassword = (length = 8) => {
-    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
-    let retVal = "";
-    for (let i = 0, n = charset.length; i < length; ++i) {
-        retVal += charset.charAt(Math.floor(Math.random() * n));
+const generatePassword = () => {
+    const numbers = "0123456789";
+    const symbols = "!@#$%&*";
+    const all = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    let password = "NF";
+    // Add 4 random numbers
+    for (let i = 0; i < 4; i++) {
+        password += numbers.charAt(Math.floor(Math.random() * numbers.length));
     }
-    return retVal;
+    // Add 1 random symbol
+    password += symbols.charAt(Math.floor(Math.random() * symbols.length));
+    // Add 2 random letters
+    for (let i = 0; i < 2; i++) {
+        password += all.charAt(Math.floor(Math.random() * all.length));
+    }
+    return password;
 };
 
 // Start Email Transporter
