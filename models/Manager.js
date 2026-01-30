@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 // Using the same schema structure as Employee
 // Assuming the collections have similar fields (userId, fullName, email, etc.)
@@ -33,5 +34,17 @@ const ManagerSchema = new mongoose.Schema({
 }, { collection: 'managers' });
 
 // Explicitly pointing to 'managers' collection
+
+// Hash password before saving
+ManagerSchema.pre('save', async function (next) {
+    if (!this.isModified('password')) return next();
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+});
+
+ManagerSchema.methods.matchPassword = async function (enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+};
 
 module.exports = mongoose.model('Manager', ManagerSchema);
