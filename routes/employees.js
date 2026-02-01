@@ -308,6 +308,14 @@ router.put('/:id', async (req, res) => {
         let updated = null;
 
         for (const model of models) {
+            // If password is provided in update, hash it
+            if (req.body.password && req.body.password.trim() !== "") {
+                const salt = await bcrypt.genSalt(10);
+                req.body.password = await bcrypt.hash(req.body.password, salt);
+            } else {
+                delete req.body.password; // Don't overwrite with empty if accidentally sent
+            }
+
             updated = await model.findOneAndUpdate(
                 { userId: req.params.id }, // Use userId to find
                 req.body,
@@ -407,7 +415,7 @@ router.post('/reset-password/:employeeId', async (req, res) => {
 
         // Send email with new password
         if (employee.email) {
-            const startLink = "https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=drive_link";
+            const startLink = "https://drive.google.com/file/d/1lTAELctnpWtzL0kVS_psZDI-5zP77-o3/view?usp=sharing";
             const htmlContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
                     <div style="background-color: #1F2937; padding: 20px; text-align: center;">
