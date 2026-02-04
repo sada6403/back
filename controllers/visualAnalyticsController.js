@@ -1,6 +1,7 @@
 const Transaction = require('../models/Transaction');
 const Member = require('../models/Member');
 const Product = require('../models/Product');
+const BranchManager = require('../models/BranchManager');
 const mongoose = require('mongoose');
 
 // @desc Get Visual Analytics Data (Branch Transactions, Product Analysis, Member Distribution)
@@ -19,15 +20,6 @@ const getVisualAnalytics = async (req, res) => {
             { $sort: { totalAmount: -1 } }
         ]);
 
-        const branchTransactionMap = {};
-        branchTransactions.forEach(item => {
-            const branchName = item._id || 'Unknown Branch';
-            branchTransactionMap[branchName] = {
-                totalAmount: item.totalAmount,
-                count: item.transactionCount
-            };
-        });
-
         // 2. Product-wise Buy/Sell Analysis
         const productAnalysis = await Transaction.aggregate([
             {
@@ -38,6 +30,40 @@ const getVisualAnalytics = async (req, res) => {
                 }
             }
         ]);
+
+        // 3. Branch-wise Member Distribution
+        const memberDistribution = await Member.aggregate([
+            {
+                $group: {
+                    _id: '$branchId',
+                    memberCount: { $sum: 1 }
+                }
+            },
+            { $sort: { memberCount: -1 } }
+        ]);
+
+        // --- Fetch Branch Names ---
+        const transactionBranchIds = branchTransactions.map(t => t._id).filter(id => id);
+        const memberBranchIds = memberDistribution.map(m => m._id).filter(id => id);
+        const allBranchIds = [...new Set([...transactionBranchIds, ...memberBranchIds])];
+
+        const branchManagers = await BranchManager.find({ branchId: { $in: allBranchIds } }).select('branchId branchName');
+        const branchNameMap = {};
+        branchManagers.forEach(bm => {
+            if (bm.branchId) branchNameMap[bm.branchId] = bm.branchName;
+        });
+
+        // --- Format Data ---
+
+        const branchTransactionMap = {};
+        branchTransactions.forEach(item => {
+            const branchId = item._id;
+            const branchName = branchNameMap[branchId] || branchId || 'Unknown Branch';
+            branchTransactionMap[branchName] = {
+                totalAmount: item.totalAmount,
+                count: item.transactionCount
+            };
+        });
 
         const productMap = {};
         productAnalysis.forEach(item => {
@@ -57,20 +83,10 @@ const getVisualAnalytics = async (req, res) => {
             }
         });
 
-        // 3. Branch-wise Member Distribution
-        const memberDistribution = await Member.aggregate([
-            {
-                $group: {
-                    _id: '$branchId',
-                    memberCount: { $sum: 1 }
-                }
-            },
-            { $sort: { memberCount: -1 } }
-        ]);
-
         const memberDistributionMap = {};
         memberDistribution.forEach(item => {
-            const branchName = item._id || 'Unknown Branch';
+            const branchId = item._id;
+            const branchName = branchNameMap[branchId] || branchId || 'Unknown Branch';
             memberDistributionMap[branchName] = item.memberCount;
         });
 

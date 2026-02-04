@@ -42,6 +42,12 @@ const loginUser = async (req, res, next) => {
         }
 
         if (user && (await user.matchPassword(password))) {
+            // Check if user is active
+            if (user.status === 'inactive') {
+                res.status(403);
+                throw new Error('Your account has been deactivated. Please contact the administrator.');
+            }
+
             const branchId = user.branchId || 'default-branch';
             const userData = {
                 id: user._id.toString(), // Use 'id' instead of '_id' for Flutter compatibility

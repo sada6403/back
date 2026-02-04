@@ -23,6 +23,7 @@ const MemberSchema = new mongoose.Schema({
     joinedDate: { type: Date, default: Date.now },
     totalBought: { type: Number, default: 0 },
     totalSold: { type: Number, default: 0 },
+    status: { type: String, default: 'active' },
     transactions: [TransactionSchema]
 });
 

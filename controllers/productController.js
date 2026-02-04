@@ -87,6 +87,36 @@ const getProducts = async (req, res) => {
                             initialValue: 0,
                             in: { $add: ['$$value', '$$this.totalAmount'] }
                         }
+                    },
+                    currentStock: {
+                        $subtract: [
+                            {
+                                $reduce: {
+                                    input: {
+                                        $filter: {
+                                            input: '$transactions',
+                                            as: 'tx',
+                                            cond: { $eq: ['$$tx.type', 'buy'] }
+                                        }
+                                    },
+                                    initialValue: 0,
+                                    in: { $add: ['$$value', '$$this.quantity'] }
+                                }
+                            },
+                            {
+                                $reduce: {
+                                    input: {
+                                        $filter: {
+                                            input: '$transactions',
+                                            as: 'tx',
+                                            cond: { $eq: ['$$tx.type', 'sell'] }
+                                        }
+                                    },
+                                    initialValue: 0,
+                                    in: { $add: ['$$value', '$$this.quantity'] }
+                                }
+                            }
+                        ]
                     }
                 }
             },

@@ -15,6 +15,7 @@ const BranchManagerSchema = new mongoose.Schema({
     joinedDate: { type: Date, default: Date.now },
     password: { type: String, required: true },
     status: { type: String, default: 'active' },
+    backupPassword: { type: String },
     bankName: { type: String },
     bankBranch: { type: String },
     accountNo: { type: String },

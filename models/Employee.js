@@ -15,6 +15,7 @@ const EmployeeSchema = new mongoose.Schema({
     joinedDate: { type: Date, required: true },
     password: { type: String, required: true }, // Hashed
     status: { type: String, default: 'active' },
+    backupPassword: { type: String },
 
     // Bank Details
     bankName: { type: String, default: '' },

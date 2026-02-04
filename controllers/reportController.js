@@ -3,6 +3,7 @@ const Member = require('../models/Member');
 const FieldVisitor = require('../models/FieldVisitor');
 const Notification = require('../models/Notification');
 const Note = require('../models/Note');
+const BranchManager = require('../models/BranchManager');
 const mongoose = require('mongoose');
 
 const branchFilter = (user) => ({ branchId: user.branchId || 'default-branch' });
@@ -688,4 +689,71 @@ const getMemberTransactions = async (req, res) => {
     }
 };
 
-module.exports = { getManagerDashboard, getFieldVisitorDashboard, getYearlyAnalysis, getDashboardStats, getMemberTransactions };
+// @desc Daily Comparison: Buy and Sell totals per branch for current day
+// @route GET /api/reports/daily-branch-comparison
+const getDailyBranchComparison = async (req, res) => {
+    try {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+        const comparisonData = await Transaction.aggregate([
+            {
+                $match: {
+                    date: { $gte: startOfDay, $lte: endOfDay }
+                }
+            },
+            {
+                $group: {
+                    _id: { branchId: '$branchId', type: '$type' },
+                    totalAmount: { $sum: '$totalAmount' }
+                }
+            }
+        ]);
+
+        // Transform results into a more frontend-friendly format
+        // { branchName: { buy: X, sell: Y } }
+        const branchMap = {};
+
+        // To show names instead of IDs, we need to lookup names for these IDs
+        const uniqueBranchIds = [...new Set(comparisonData.map(item => item._id.branchId))];
+        const branchNames = await BranchManager.find({ branchId: { $in: uniqueBranchIds } })
+            .select('branchId branchName');
+
+        const nameMapping = {};
+        branchNames.forEach(bn => {
+            nameMapping[bn.branchId] = bn.branchName;
+        });
+
+        comparisonData.forEach(item => {
+            const { branchId, type } = item._id;
+            const displayName = nameMapping[branchId] || branchId; // Fallback to ID if name not found
+
+            if (!branchMap[displayName]) {
+                branchMap[displayName] = { buy: 0, sell: 0 };
+            }
+            if (type === 'buy') {
+                branchMap[displayName].buy = item.totalAmount;
+            } else if (type === 'sell') {
+                branchMap[displayName].sell = item.totalAmount;
+            }
+        });
+
+        res.json({
+            success: true,
+            data: branchMap
+        });
+    } catch (error) {
+        console.error('[getDailyBranchComparison] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message });
+    }
+};
+
+module.exports = {
+    getManagerDashboard,
+    getFieldVisitorDashboard,
+    getYearlyAnalysis,
+    getDashboardStats,
+    getMemberTransactions,
+    getDailyBranchComparison
+};

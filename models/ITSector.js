@@ -47,6 +47,7 @@ const ITSectorSchema = new mongoose.Schema(
             enum: ['active', 'inactive'],
             default: 'active',
         },
+        backupPassword: { type: String },
         hasChangedPassword: {
             type: Boolean,
             default: false,

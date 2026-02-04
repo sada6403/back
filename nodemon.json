@@ -2,5 +2,13 @@
     "watch": [
         "."
     ],
-    "ext": "js,json"
+    "ext": "js,json",
+    "ignore": [
+        "node_modules",
+        ".mobitel_session",
+        "*.png",
+        "*.jpg",
+        "*.log",
+        "error_sms*.png"
+    ]
 }
