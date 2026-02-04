@@ -13,8 +13,12 @@ class Product {
   List<String> images; // local file paths
   double soldPerMonth; // kg sold per month
   double boughtPerMonth; // kg bought per month
-  double currentStock; // available stock in kg
+  double totalSoldValue; // Total LKR from all-time sales
+  double totalBoughtValue; // Total LKR from all-time buys
+  double currentStock; // available stock
   DateTime createdAt; // when product was added
+  String unit; // 'Kg', 'g', 'number', 'packets'
+  List<Map<String, dynamic>> history; // Last 12 months transactions
 
   Product({
     required this.id,
@@ -25,9 +29,14 @@ class Product {
     List<String>? images,
     this.soldPerMonth = 0.0,
     this.boughtPerMonth = 0.0,
+    this.totalSoldValue = 0.0,
+    this.totalBoughtValue = 0.0,
     this.currentStock = 0.0,
     DateTime? createdAt,
+    this.unit = 'Kg',
+    List<Map<String, dynamic>>? history,
   }) : images = images ?? [],
+       history = history ?? [],
        createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -39,10 +48,11 @@ class Product {
     'images': images,
     'soldPerMonth': soldPerMonth,
     'boughtPerMonth': boughtPerMonth,
+    'totalSoldValue': totalSoldValue,
+    'totalBoughtValue': totalBoughtValue,
     'currentStock': currentStock,
     'createdAt': createdAt.toIso8601String(),
-    'unit':
-        'Kg', // Default unit for now, as Management_IT doesn't seem to have it
+    'unit': unit,
   };
 
   factory Product.fromJson(Map<String, dynamic> m) => Product(
@@ -54,10 +64,18 @@ class Product {
     images: (m['images'] as List<dynamic>?)?.map((e) => e as String).toList(),
     soldPerMonth: (m['soldPerMonth'] as num?)?.toDouble() ?? 0.0,
     boughtPerMonth: (m['boughtPerMonth'] as num?)?.toDouble() ?? 0.0,
+    totalSoldValue: (m['totalSoldValue'] as num?)?.toDouble() ?? 0.0,
+    totalBoughtValue: (m['totalBoughtValue'] as num?)?.toDouble() ?? 0.0,
     currentStock: (m['currentStock'] as num?)?.toDouble() ?? 0.0,
     createdAt: m['createdAt'] != null
         ? DateTime.parse(m['createdAt'] as String)
         : DateTime.now(),
+    unit: m['unit'] as String? ?? 'Kg',
+    history:
+        (m['history'] as List<dynamic>?)
+            ?.map((e) => e as Map<String, dynamic>)
+            .toList() ??
+        [],
   );
 }
 
@@ -73,7 +91,17 @@ class ProductService {
     try {
       final response = await http.get(Uri.parse(_baseUrl));
       if (response.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(response.body);
+        final dynamic body = jsonDecode(response.body);
+        List<dynamic> list = [];
+        if (body is List) {
+          list = body;
+        } else if (body is Map && body.containsKey('data')) {
+          final data = body['data'];
+          if (data is List) {
+            list = data;
+          }
+        }
+
         _products.clear();
         for (final e in list) {
           _products.add(Product.fromJson(e as Map<String, dynamic>));
@@ -86,34 +114,166 @@ class ProductService {
 
   static List<Product> getProducts() => List.unmodifiable(_products);
 
-  static Future<void> addProduct(Product p) async {
+  static Future<bool> addProduct(Product p) async {
     try {
-      final response = await http.post(
-        Uri.parse(_baseUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(p.toJson()),
-      );
+      final request = http.MultipartRequest('POST', Uri.parse(_baseUrl));
+      debugPrint('--- Adding Product ---');
+      request.fields['name'] = p.name;
+      request.fields['description'] = p.description;
+      request.fields['defaultPrice'] = p.price.toString();
+      request.fields['buyingPrice'] = p.cost.toString();
+      request.fields['currentStock'] = p.currentStock.toString();
+      request.fields['unit'] = p.unit;
+
+      // Add other fields as needed, match backend expectations
+      request.fields['soldPerMonth'] = p.soldPerMonth.toString();
+      request.fields['boughtPerMonth'] = p.boughtPerMonth.toString();
+      request.fields['totalSoldValue'] = p.totalSoldValue.toString();
+      request.fields['totalBoughtValue'] = p.totalBoughtValue.toString();
+
+      // Handle images
+      debugPrint('Processing ${p.images.length} images for upload...');
+      for (final imagePath in p.images) {
+        // Simple check: if it looks like a local path (not http/starts with uploads), stick it in file
+        // Or better: try to create a file, if it fails assume it's a server path?
+        // Usually local paths from ImagePicker are absolute paths.
+        if (!imagePath.startsWith('http') &&
+            !imagePath.startsWith('uploads/')) {
+          try {
+            debugPrint('Attaching file: $imagePath');
+            request.files.add(
+              await http.MultipartFile.fromPath('images', imagePath),
+            );
+          } catch (e) {
+            debugPrint('Could not add file $imagePath: $e');
+            // If we can't add it as a file, maybe it's a relative path we should keep?
+            // But for addProduct, usually all are new files.
+          }
+        } else {
+          // If it's an existing image (server path), we might want to send it so backend keeps it
+          // But backend new logic expects 'images' field for existing ones.
+          // MultipartRequest fields can have multiple values for same key?
+          // http package 'fields' is Map<String, String>, so it DOES NOT support multiple values easily like that
+          // unless we manually encode it or use a different approach.
+          // However, standard http.MultipartRequest 'fields' is value only.
+          // Only 'files' is a list.
+          // To send multiple 'images' string fields, we might need a custom request or hack.
+          // Actually, 'fields' in MultipartRequest is Map<String, String>.
+          // A common workaround is 'images[]' or just handle it as a single JSON field if backend supports.
+          // Let's attempt to send existing images as a separate field or check if backend supports array in 'images' key via body-parser(it does).
+          // But MultipartRequest fields don't support arrays directly.
+          // Trick: request.files.add(http.MultipartFile.fromString('images', imagePath)); ?
+          // Or just send a JSON string for existing images in a separate field 'existingImages' and update backend?
+          // OR: just don't support keeping old images/mixing for now, OR rely on backend handling 'images' field if we can send multiple.
+          // Wait, I can try to add it to 'fields' but it overwrites.
+          // Let's just modify the backend logic slightly to accept 'existingImages' if needed, or use a workaround.
+          // Workaround: Send 'images' as a JSON string? "['path1']"
+          // Backend code: imagePaths = Array.isArray(images) ? images : [images];
+          // If we send it as one string, backend might treat it as one image.
+        }
+      }
+
+      // If we have existing images logic conflict, for ADD it's fine (usually new).
+
+      final streamResponse = await request.send();
+      final response = await http.Response.fromStream(streamResponse);
+
       if (response.statusCode == 201) {
         await fetchProducts();
+        return true;
+      } else {
+        debugPrint('Failed to add product: ${response.body}');
+        return false;
       }
     } catch (e) {
       debugPrint('Error adding product: $e');
+      return false;
     }
   }
 
-  static Future<void> updateProduct(String id, Product updated) async {
+  static Future<bool> updateProduct(String id, Product updated) async {
     try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/$id'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(updated.toJson()),
+      debugPrint('--- Updating Product ($id) ---');
+
+      // Check if we have any NEW local files to upload
+      bool hasNewImages = updated.images.any(
+        (imagePath) =>
+            !imagePath.startsWith('http') &&
+            !imagePath.startsWith('uploads/') &&
+            !imagePath.startsWith('uploads\\'),
       );
-      if (response.statusCode == 200) {
-        final idx = _products.indexWhere((e) => e.id == id); // id is _id now
-        if (idx != -1) _products[idx] = updated;
+
+      if (hasNewImages) {
+        // Use Multipart Request
+        debugPrint('Mode: Multipart Update (New Images Detected)');
+        final request = http.MultipartRequest(
+          'PUT',
+          Uri.parse('$_baseUrl/$id'),
+        );
+        request.fields['name'] = updated.name;
+        request.fields['description'] = updated.description;
+        request.fields['defaultPrice'] = updated.price.toString();
+        request.fields['buyingPrice'] = updated.cost.toString();
+        request.fields['currentStock'] = updated.currentStock.toString();
+        request.fields['unit'] = updated.unit;
+
+        List<String> existingImages = [];
+
+        for (final imagePath in updated.images) {
+          if (!imagePath.startsWith('http') &&
+              !imagePath.startsWith('uploads/') &&
+              !imagePath.startsWith('uploads\\')) {
+            try {
+              final file = await http.MultipartFile.fromPath(
+                'images',
+                imagePath,
+              );
+              request.files.add(file);
+            } catch (e) {
+              debugPrint('Skipping file: $e');
+            }
+          } else {
+            existingImages.add(imagePath);
+          }
+        }
+
+        request.fields['existingImages'] = jsonEncode(existingImages);
+
+        final streamResponse = await request.send();
+        final response = await http.Response.fromStream(streamResponse);
+        return response.statusCode == 200;
+      } else {
+        // Use JSON Request (Text only or Image Deletion)
+        debugPrint('Mode: JSON PATCH Update (No New Images)');
+
+        final Map<String, dynamic> body = {
+          'name': updated.name,
+          'description': updated.description,
+          'defaultPrice': updated.price,
+          'buyingPrice': updated.cost,
+          'currentStock': updated.currentStock,
+          'unit': updated.unit,
+          // CRITICAL: We MUST send this, even if empty, to update the DB.
+          'existingImages': updated.images,
+        };
+
+        final response = await http.patch(
+          Uri.parse('$_baseUrl/$id'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        );
+
+        if (response.statusCode == 200) {
+          await fetchProducts();
+          return true;
+        } else {
+          debugPrint('Update failed: ${response.body}');
+          return false;
+        }
       }
     } catch (e) {
       debugPrint('Error updating product: $e');
+      return false;
     }
   }
 
@@ -143,20 +303,38 @@ class ProductService {
   // Returns a list of 12 values representing the last 12 calendar months (oldest->newest)
   static List<double> monthlyIncome() {
     final months = List<double>.filled(12, 0.0);
-    if (_products.isEmpty) return months;
+    // if (_products.isEmpty) return months; // Don't return early, just defaults to 0s
 
     final now = DateTime.now();
 
     for (int i = 0; i < 12; i++) {
-      // compute month start for (now - (11 - i)) so index 11 is current month
       final monthOffset = i - 11;
-      final monthDate = DateTime(now.year, now.month + monthOffset, 1);
+      // Start of the target month
+      final monthStart = DateTime(now.year, now.month + monthOffset, 1);
+      // End of the target month
+      final monthEnd = DateTime(
+        now.year,
+        now.month + monthOffset + 1,
+        0,
+        23,
+        59,
+        59,
+      );
+
       for (final p in _products) {
-        // include product only if it existed at this month
-        if (!p.createdAt.isAfter(
-          DateTime(monthDate.year, monthDate.month + 1, 0),
-        )) {
-          months[i] += p.price * p.soldPerMonth;
+        for (final tx in p.history) {
+          // Check if transaction is 'sell' and falls in this month
+          final type = tx['type'];
+          final dateStr = tx['date'];
+          if (type == 'sell' && dateStr != null) {
+            final date = DateTime.parse(dateStr.toString());
+            if (date.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
+                date.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+              // Use totalAmount from history if available, else calc
+              final amount = (tx['totalAmount'] as num?)?.toDouble() ?? 0.0;
+              months[i] += amount;
+            }
+          }
         }
       }
     }
@@ -165,18 +343,33 @@ class ProductService {
 
   static List<double> monthlyOutcome() {
     final months = List<double>.filled(12, 0.0);
-    if (_products.isEmpty) return months;
 
     final now = DateTime.now();
 
     for (int i = 0; i < 12; i++) {
       final monthOffset = i - 11;
-      final monthDate = DateTime(now.year, now.month + monthOffset, 1);
+      final monthStart = DateTime(now.year, now.month + monthOffset, 1);
+      final monthEnd = DateTime(
+        now.year,
+        now.month + monthOffset + 1,
+        0,
+        23,
+        59,
+        59,
+      );
+
       for (final p in _products) {
-        if (!p.createdAt.isAfter(
-          DateTime(monthDate.year, monthDate.month + 1, 0),
-        )) {
-          months[i] += p.cost * p.boughtPerMonth;
+        for (final tx in p.history) {
+          final type = tx['type'];
+          final dateStr = tx['date'];
+          if (type == 'buy' && dateStr != null) {
+            final date = DateTime.parse(dateStr.toString());
+            if (date.isAfter(monthStart.subtract(const Duration(seconds: 1))) &&
+                date.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
+              final amount = (tx['totalAmount'] as num?)?.toDouble() ?? 0.0;
+              months[i] += amount;
+            }
+          }
         }
       }
     }
@@ -203,6 +396,7 @@ class ProductService {
     double boughtPerMonth = 0.0,
     double currentStock = 0.0,
     DateTime? createdAt,
+    String unit = 'Kg',
   }) {
     return Product(
       id: '', // Generated by backend
@@ -215,6 +409,7 @@ class ProductService {
       boughtPerMonth: boughtPerMonth,
       currentStock: currentStock,
       createdAt: createdAt,
+      unit: unit,
     );
   }
 }

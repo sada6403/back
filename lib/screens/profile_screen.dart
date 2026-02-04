@@ -15,12 +15,11 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _firstNameCtrl = TextEditingController();
-  final TextEditingController _lastNameCtrl = TextEditingController();
-  final TextEditingController _dobCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _mobileCtrl = TextEditingController();
   String? _avatarPath;
   bool _isEditing = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -31,8 +30,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _loadData() {
     final profile = AuthService.getProfile();
     _firstNameCtrl.text = profile['firstName'] ?? '';
-    _lastNameCtrl.text = profile['lastName'] ?? '';
-    _dobCtrl.text = profile['dob'] ?? '';
     _emailCtrl.text = profile['email'] ?? '';
     _mobileCtrl.text = profile['mobile'] ?? '';
     setState(() {
@@ -114,18 +111,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _toggleEdit() {
-    setState(() {
-      if (_isEditing) {
-        // Save
-        AuthService.updateProfile(
-          newFirstName: _firstNameCtrl.text,
-          newLastName: _lastNameCtrl.text,
-          newDob: _dobCtrl.text,
-          newEmail: _emailCtrl.text,
-          newMobile: _mobileCtrl.text,
-          newAvatarPath: _avatarPath,
-        );
+  Future<void> _toggleEdit() async {
+    if (_isEditing) {
+      // Save Mode
+      setState(() => _isLoading = true);
+
+      final success = await AuthService.updateProfile(
+        newFirstName: _firstNameCtrl.text,
+        newEmail: _emailCtrl.text,
+        newMobile: _mobileCtrl.text,
+        newAvatarPath: _avatarPath,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isLoading = false);
+
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Profile Updated Successfully!'),
@@ -133,9 +135,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        setState(() => _isEditing = false);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to update profile. Please try again.'),
+            backgroundColor: Color(0xFFEF4444),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
-      _isEditing = !_isEditing;
-    });
+    } else {
+      // Enter Edit Mode
+      setState(() => _isEditing = true);
+    }
   }
 
   @override
@@ -292,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    '${_firstNameCtrl.text} ${_lastNameCtrl.text}',
+                    _firstNameCtrl.text,
                     style: GoogleFonts.outfit(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -329,13 +342,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : const Color(0xFF0EA5E9))
                                 .withValues(alpha: 0.4),
                       ),
-                      child: Text(
-                        _isEditing ? 'Save Changes' : 'Edit Profile',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              _isEditing ? 'Save Changes' : 'Edit Profile',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -370,22 +392,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildSectionHeader('Personal Information'),
                   const SizedBox(height: 16),
                   _buildGlassTextField(
-                    'First Name',
+                    'Full Name',
                     _firstNameCtrl,
                     Icons.person_outline,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildGlassTextField(
-                    'Last Name',
-                    _lastNameCtrl,
-                    Icons.person_outline,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildGlassTextField(
-                    'Date of Birth',
-                    _dobCtrl,
-                    Icons.calendar_today_outlined,
-                    isDate: true,
                   ),
 
                   const SizedBox(height: 24),

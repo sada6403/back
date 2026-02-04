@@ -1,0 +1,23 @@
+[
+  {
+    "_id": "6950f6b306105546ec058914",
+    "name": "Aloe Vera Leaf",
+    "currentStock": 363,
+    "totalSoldValue": 13750,
+    "totalBoughtValue": 34590
+  },
+  {
+    "_id": "6950f6b306105546ec058916",
+    "name": "Aloe Vera Packets",
+    "currentStock": 10,
+    "totalSoldValue": 0,
+    "totalBoughtValue": 6500
+  },
+  {
+    "_id": "6950f6b306105546ec058918",
+    "name": "Aloe Vera Plant",
+    "currentStock": 50,
+    "totalSoldValue": 0,
+    "totalBoughtValue": 7500
+  }
+]

@@ -32,17 +32,37 @@ class _LoginButtonState extends State<LoginButton> {
 
     setState(() => _isLoading = true);
 
-    // Call async login
-    final success = await AuthService.login(enteredUser, enteredPass);
+    // Call async login with 'it_sector' role as this app is for IT only
+    final success = await AuthService.login(
+      enteredUser,
+      enteredPass,
+      role: 'it_sector',
+    );
 
     if (!mounted) return;
 
     setState(() => _isLoading = false);
 
     if (success) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const DashboardScreen()),
-      );
+      // Check if the user is authorized for this app (IT Sector Only)
+      if (AuthService.role == 'manager') {
+        // Access Denied for Managers
+        await AuthService.logout(); // Clear session
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Access Denied: This app is for IT Sector only.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      } else {
+        // Authorized (Admin / IT Sector)
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

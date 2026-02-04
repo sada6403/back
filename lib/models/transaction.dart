@@ -9,6 +9,9 @@ class Transaction {
   final String status; // 'pending', 'approved', 'rejected'
   final String? approvedBy;
   final DateTime? approvedAt;
+  final double quantity;
+  final String unit;
+  final double unitPrice;
 
   Transaction({
     this.id = '', // Default empty if not from DB
@@ -20,12 +23,15 @@ class Transaction {
     this.status = 'approved', // Default approved for low value
     this.approvedBy,
     this.approvedAt,
+    this.quantity = 0.0,
+    this.unit = '',
+    this.unitPrice = 0.0,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
       id: json['_id'] as String? ?? '', // Map MongoDB _id
-      date: DateTime.parse(json['date'] as String),
+      date: DateTime.parse(json['date'] as String).toLocal(),
       amount:
           (json['totalAmount'] as num?)?.toDouble() ??
           (json['amount'] as num?)?.toDouble() ??
@@ -42,8 +48,11 @@ class Transaction {
       status: json['status'] as String? ?? 'approved',
       approvedBy: json['approvedBy'] as String?,
       approvedAt: json['approvedAt'] != null
-          ? DateTime.tryParse(json['approvedAt'] as String)
+          ? DateTime.tryParse(json['approvedAt'] as String)?.toLocal()
           : null,
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 0.0,
+      unit: json['unitType'] as String? ?? '',
+      unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
     );
   }
 

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io'; // Added for File
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,9 +35,13 @@ class Employee {
   // Personal Details
   String nic;
   String civilStatus;
+  String gender;
   String postalAddress;
   String permanentAddress;
   String education; // Stored as a simple string summary for now
+  Map<String, dynamic> educationData; // Store full object
+  List<dynamic> workExperience;
+  List<dynamic> references;
 
   Employee({
     this.userId = '',
@@ -61,10 +66,78 @@ class Employee {
     this.accountHolder = '',
     this.nic = '',
     this.civilStatus = '',
+    this.gender = '',
     this.postalAddress = '',
     this.permanentAddress = '',
     this.education = '',
+    this.educationData = const {},
+    this.workExperience = const [],
+    this.references = const [],
   });
+
+  Employee copyWith({
+    String? userId,
+    String? id,
+    String? fullName,
+    String? email,
+    String? phone,
+    DateTime? dob,
+    String? role,
+    String? position,
+    double? salary,
+    String? branchName,
+    String? branchId,
+    DateTime? joinedDate,
+    String? password,
+    String? status,
+    double? targetAmount,
+    String? assignedArea,
+    String? bankName,
+    String? bankBranch,
+    String? accountNo,
+    String? accountHolder,
+    String? nic,
+    String? civilStatus,
+    String? gender,
+    String? postalAddress,
+    String? permanentAddress,
+    String? education,
+    Map<String, dynamic>? educationData,
+    List<dynamic>? workExperience,
+    List<dynamic>? references,
+  }) {
+    return Employee(
+      userId: userId ?? this.userId,
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      dob: dob ?? this.dob,
+      role: role ?? this.role,
+      position: position ?? this.position,
+      salary: salary ?? this.salary,
+      branchName: branchName ?? this.branchName,
+      branchId: branchId ?? this.branchId,
+      joinedDate: joinedDate ?? this.joinedDate,
+      password: password ?? this.password,
+      status: status ?? this.status,
+      targetAmount: targetAmount ?? this.targetAmount,
+      assignedArea: assignedArea ?? this.assignedArea,
+      bankName: bankName ?? this.bankName,
+      bankBranch: bankBranch ?? this.bankBranch,
+      accountNo: accountNo ?? this.accountNo,
+      accountHolder: accountHolder ?? this.accountHolder,
+      nic: nic ?? this.nic,
+      civilStatus: civilStatus ?? this.civilStatus,
+      gender: gender ?? this.gender,
+      postalAddress: postalAddress ?? this.postalAddress,
+      permanentAddress: permanentAddress ?? this.permanentAddress,
+      education: education ?? this.education,
+      educationData: educationData ?? this.educationData,
+      workExperience: workExperience ?? this.workExperience,
+      references: references ?? this.references,
+    );
+  }
 
   // Calculate working period in days from joinedDate to today
   int getWorkingDaysFromNow() {
@@ -109,9 +182,12 @@ class Employee {
 
       'nic': nic,
       'civilStatus': civilStatus,
+      'gender': gender,
       'postalAddress': postalAddress,
       'permanentAddress': permanentAddress,
-      'education': education,
+      'education': educationData.isNotEmpty ? educationData : education,
+      'workExperience': workExperience,
+      'references': references,
     };
   }
 
@@ -120,7 +196,7 @@ class Employee {
     // Managers: has 'email', 'name', 'code', 'role'='manager'
     // FieldVisitors: 'name', 'userId', 'phone', 'role'='field_visitor', 'bankDetails'
 
-    String r = m['role'] as String? ?? type;
+    String r = (m['role'] as String? ?? type).trim();
     if (r == 'manager') r = 'Branch Manager';
     if (r == 'field_visitor') r = 'Field Visitor';
     if (r == 'it_sector') r = 'IT Sector';
@@ -152,16 +228,24 @@ class Employee {
 
     // Education might be an object or string
     String edu = '';
+    Map<String, dynamic> eduData = {};
+
     if (m['education'] != null) {
       if (m['education'] is Map) {
         // Quick resume: e.g., "OL: Passed, AL: Passed"
-        final eMap = m['education'];
+        eduData = m['education'] as Map<String, dynamic>;
         edu =
-            'OL: ${eMap['ol'] != null ? "Yes" : "-"}, AL: ${eMap['al'] != null ? "Yes" : "-"}';
+            'OL: ${eduData['ol'] != null ? "Yes" : "-"}, AL: ${eduData['al'] != null ? "Yes" : "-"}';
       } else {
         edu = m['education'].toString();
       }
     }
+
+    // Work Experience & References
+    List<dynamic> workExp = m['workExperience'] is List
+        ? m['workExperience']
+        : [];
+    List<dynamic> refs = m['references'] is List ? m['references'] : [];
 
     return Employee(
       userId: uId,
@@ -187,9 +271,13 @@ class Employee {
 
       nic: m['nic'] as String? ?? '',
       civilStatus: m['civilStatus'] as String? ?? '',
+      gender: m['gender'] as String? ?? '',
       postalAddress: m['postalAddress'] as String? ?? '',
       permanentAddress: m['permanentAddress'] as String? ?? '',
       education: edu,
+      educationData: eduData,
+      workExperience: workExp,
+      references: refs,
     );
   }
 
@@ -208,6 +296,7 @@ class Employee {
 
 class EmployeeService {
   static final List<Employee> _employees = [];
+
   // Pointing to NF Backend
   static String get _usersUrl => ApiConfig.users;
   static String get _fvUrl => ApiConfig.fieldVisitors;
@@ -222,6 +311,8 @@ class EmployeeService {
   static Future<void> fetchEmployees() async {
     try {
       final response = await http.get(Uri.parse(_usersUrl));
+      debugPrint('Fetch Employees Status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
         if (body['success'] == true) {
@@ -230,7 +321,9 @@ class EmployeeService {
 
           // Managers
           if (data['managers'] != null) {
-            for (final m in data['managers']) {
+            final mgrs = data['managers'] as List;
+            debugPrint('Found ${mgrs.length} managers in API');
+            for (final m in mgrs) {
               _employees.add(
                 Employee.fromJson(m as Map<String, dynamic>, type: 'Manager'),
               );
@@ -238,7 +331,9 @@ class EmployeeService {
           }
           // Field Visitors
           if (data['fieldVisitors'] != null) {
-            for (final fv in data['fieldVisitors']) {
+            final fvs = data['fieldVisitors'] as List;
+            debugPrint('Found ${fvs.length} fieldVisitors in API');
+            for (final fv in fvs) {
               _employees.add(
                 Employee.fromJson(
                   fv as Map<String, dynamic>,
@@ -247,9 +342,26 @@ class EmployeeService {
               );
             }
           }
-          // IT Sector
-          if (data['itSectors'] != null) {
-            for (final it in data['itSectors']) {
+          // Branch Managers
+          if (data['branchManagers'] != null) {
+            final bms = data['branchManagers'] as List;
+            debugPrint('Found ${bms.length} Branch Managers in API');
+            for (final bm in bms) {
+              _employees.add(
+                Employee.fromJson(
+                  bm as Map<String, dynamic>,
+                  type: 'Branch Manager',
+                ),
+              );
+            }
+          }
+
+          // Check 'itSectors' first (new backend), fall back to 'employees' (legacy)
+          final itSectors = data['itSectors'] ?? data['employees'];
+          if (itSectors != null) {
+            final its = itSectors as List;
+            debugPrint('Found ${its.length} itSectors in API');
+            for (final it in its) {
               _employees.add(
                 Employee.fromJson(
                   it as Map<String, dynamic>,
@@ -258,7 +370,10 @@ class EmployeeService {
               );
             }
           }
+          debugPrint('Total Parsed Employees: ${_employees.length}');
         }
+      } else {
+        debugPrint('Fetch Employees Failed: ${response.body}');
       }
     } catch (e) {
       debugPrint('Error fetching employees: $e');
@@ -270,7 +385,7 @@ class EmployeeService {
   static Future<void> addEmployee(Employee e) async {
     try {
       String url = '';
-      if (e.role == 'Branch Manager') {
+      if (e.role.contains('Manager')) {
         url = _authRegisterUrl;
       } else if (e.role == 'IT Sector') {
         url = ApiConfig.authRegisterITSector;
@@ -305,29 +420,40 @@ class EmployeeService {
   static Future<Map<String, dynamic>> importITSectorExcel(
     List<Map<String, dynamic>> rows,
   ) async {
+    // ... existing ...
+    return {};
+  }
+
+  // Generic Excel file upload for bulk employees
+  static Future<Map<String, dynamic>> uploadBulkEmployees(File file) async {
     try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(ApiConfig.bulkEmployees),
+      );
+      // Add token if needed, but existing backend middleware might vary.
+      // Assuming open or basic implementation for now as per plan,
+      // but let's add token safely as good practice.
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
+      if (token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
 
-      final response = await http.post(
-        Uri.parse(ApiConfig.itSectorImport),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'rows': rows}),
-      );
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        await fetchEmployees(); // Refresh list
+        await fetchEmployees(); // Refresh locally
         return body;
       } else {
-        debugPrint('Failed to import Excel: ${response.body}');
-        throw Exception('Failed to import Excel: ${response.body}');
+        throw Exception('Bulk upload failed: ${response.body}');
       }
-    } catch (err) {
-      debugPrint('Error importing Excel: $err');
+    } catch (e) {
+      debugPrint('Error uploading bulk employees: $e');
       rethrow;
     }
   }
@@ -375,9 +501,79 @@ class EmployeeService {
         debugPrint('Employee updated successfully');
       } else {
         debugPrint('Update API failed: ${response.body}');
+        throw Exception('Update failed: ${response.body}');
       }
     } catch (e) {
       debugPrint('Error updating employee: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> resetPassword(String userId) async {
+    try {
+      final baseUrl = ApiConfig.baseUrl;
+      final url = '$baseUrl/employees/reset-password/$userId';
+
+      debugPrint('Triggering password reset for: $userId');
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      );
+
+      debugPrint('Reset response status: ${response.statusCode}');
+
+      final contentType = response.headers['content-type'] ?? '';
+
+      // Attempt to parse JSON regardless of status code if content type matches
+      if (contentType.contains('application/json')) {
+        final body = jsonDecode(response.body);
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return body;
+        } else {
+          // Server returned a JSON error (like 404 or 500)
+          throw Exception(
+            body['message'] ?? 'Server error (${response.statusCode})',
+          );
+        }
+      } else {
+        // Non-JSON response (The "non-JSON response (404)" error the user is seeing)
+        if (response.statusCode == 404) {
+          throw Exception(
+            'Endpoint not found (404). This usually means the backend code on your server is old. Please pull latest code and restart PM2.',
+          );
+        } else {
+          throw Exception(
+            'Server error (${response.statusCode}). Expected JSON but got: ${response.body.take(100)}',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error resetting password: $e');
+      rethrow;
+    }
+  }
+
+  static Future<void> toggleStatus(String id) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final response = await http.patch(
+        Uri.parse('$_usersUrl/$id/status'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        await fetchEmployees();
+      } else {
+        throw Exception('Failed to toggle status: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error toggling employee status: $e');
+      rethrow;
     }
   }
 
@@ -598,10 +794,25 @@ class EmployeeService {
   ];
 
   static const List<String> branches = [
+    'Jaffna (Kondavil)',
+    'Jaffna (Chavakachcheri)',
     'Kalmunai',
     'Trincomalee',
-    'Chavakachcheri',
-    'Kondavil',
-    'Jaffna', // Fallback
+    'Akkaraipattu',
+    'Ampara',
+    'Batticaloa',
+    'Cheddikulam',
+    'Kilinochchi',
+    'Mannar',
+    'Vavuniya',
+    'Mallavi',
+    'Mulliyawalai',
+    'Nedunkeny',
+    'Puthukkudiyiruppu',
+    'Aschuveli',
   ];
+}
+
+extension StringExtension on String {
+  String take(int n) => length > n ? substring(0, n) : this;
 }

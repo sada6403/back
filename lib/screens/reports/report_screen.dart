@@ -4,6 +4,7 @@ import '../../services/transaction_service.dart';
 import '../../services/employee_service.dart';
 
 import '../../models/transaction.dart';
+import 'visual_comparison_screen.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -214,6 +215,22 @@ class _ReportScreenState extends State<ReportScreen> {
               label: Text(_isLoading ? 'Generating...' : 'Generate PDF Report'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const VisualComparisonScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.pie_chart),
+              label: const Text('Visual Comparison Report (Pie Chart)'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Colors.blue),
               ),
             ),
           ],

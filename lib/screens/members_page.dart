@@ -4,15 +4,16 @@ import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
+
 import 'dart:io';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/member_service.dart';
+import '../services/audit_service.dart';
 import '../services/transaction_service.dart';
-import '../models/transaction.dart' as model; // Alias to avoid conflict if any
+
 import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' hide Border;
+import 'package:printing/printing.dart';
 
 enum SortOption { recent, oldest, highestBought, highestSold }
 
@@ -36,12 +37,90 @@ class _MembersPageState extends State<MembersPage> {
   }
 
   Timer? _debounce;
+  final List<_InlineMemberRow> _newRows = [];
+  String? _editingMemberId;
+  _InlineMemberRow? _editingRow;
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     _debounce?.cancel();
+    for (var r in _newRows) {
+      r.dispose();
+    }
     super.dispose();
+  }
+
+  void _startEditing(Member member) {
+    if (_editingRow != null) {
+      _editingRow!.dispose();
+    }
+    setState(() {
+      _editingMemberId = member.id;
+      _editingRow = _InlineMemberRow();
+      _editingRow!.name.text = member.name;
+      _editingRow!.contact.text = member.contact;
+      _editingRow!.email.text = member.email;
+      _editingRow!.nic.text = member.nic ?? '';
+      _editingRow!.address.text = member.address ?? member.area ?? '';
+      _editingRow!.fieldVisitorId.text = member.fieldVisitorId ?? '';
+      _editingRow!.memberCode.text = member.memberCode ?? '';
+      _editingRow!.dob = member.dob ?? DateTime(1990);
+      _editingRow!.joinedDate = member.joinedDate ?? DateTime.now();
+    });
+  }
+
+  Future<void> _saveEditing(Member originalMember) async {
+    if (_editingRow == null) return;
+
+    final updatedMember = originalMember.copyWith(
+      name: _editingRow!.name.text,
+      contact: _editingRow!.contact.text,
+      email: _editingRow!.email.text,
+      nic: _editingRow!.nic.text,
+      address: _editingRow!.address.text,
+      fieldVisitorId: _editingRow!.fieldVisitorId.text.isNotEmpty
+          ? _editingRow!.fieldVisitorId.text
+          : null,
+      memberCode: _editingRow!.memberCode.text.isNotEmpty
+          ? _editingRow!.memberCode.text
+          : null,
+      dob: _editingRow!.dob,
+      joinedDate: _editingRow!.joinedDate,
+    );
+
+    try {
+      await MemberService.updateMember(originalMember.id, updatedMember);
+      AuditService.logAction(
+        'Member Updated',
+        'Updated Member: ${updatedMember.name} (Inline)',
+        targetUser: updatedMember.name,
+      );
+      if (!mounted) return;
+      _cancelEditing();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Member ${updatedMember.name} updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingMemberId = null;
+      if (_editingRow != null) {
+        _editingRow!.dispose();
+        _editingRow = null;
+      }
+    });
   }
 
   void _onSearchChanged(String query) {
@@ -52,7 +131,96 @@ class _MembersPageState extends State<MembersPage> {
     });
   }
 
-  void _openAddEditDialog({Member? member}) async {
+  Widget _buildInlineField(
+    TextEditingController ctrl,
+    String hint, {
+    bool isPhone = false,
+    double? width,
+  }) {
+    return SizedBox(
+      width: width ?? 100,
+      height: 35,
+      child: TextField(
+        controller: ctrl,
+        keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
+        style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.outfit(color: Colors.white30, fontSize: 11),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 0,
+          ),
+          filled: true,
+          fillColor: Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveInlineRow(_InlineMemberRow row, int index) async {
+    if (row.name.text.isEmpty || row.contact.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Name and Contact are required!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final newMember = MemberService.create(
+        id: 'M${DateTime.now().millisecondsSinceEpoch}',
+        name: row.name.text,
+        contact: row.contact.text,
+        email: row.email.text,
+      );
+
+      final fullMember = newMember.copyWith(
+        nic: row.nic.text,
+        address: row.address.text,
+        fieldVisitorId: row.fieldVisitorId.text.isNotEmpty
+            ? row.fieldVisitorId.text
+            : null,
+      );
+
+      await MemberService.addMember(fullMember);
+
+      AuditService.logAction(
+        'Member Created',
+        'Created Member: ${row.name.text}',
+        targetUser: row.name.text,
+      );
+
+      setState(() {
+        // Remove from inline rows as it will be fetched in main list
+        row.dispose();
+        _newRows.removeAt(index);
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Member ${row.name.text} added!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /* void _openAddEditDialog({Member? member}) async {
+    return; /*
     final isEdit = member != null;
     final idCtrl = TextEditingController(text: member?.id ?? '');
     final nameCtrl = TextEditingController(text: member?.name ?? '');
@@ -60,6 +228,7 @@ class _MembersPageState extends State<MembersPage> {
     final emailCtrl = TextEditingController(text: member?.email ?? '');
     DateTime? dob = member?.dob;
     DateTime? joinedDate = member?.joinedDate;
+    String statusVal = member?.status ?? 'active'; // Default to active
 
     await showDialog<void>(
       context: context,
@@ -183,6 +352,36 @@ class _MembersPageState extends State<MembersPage> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                // Status Toggle
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: SwitchListTile(
+                    title: Text(
+                      'Account Status',
+                      style: GoogleFonts.outfit(fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      statusVal.toUpperCase(),
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: statusVal == 'active'
+                            ? Colors.green
+                            : Colors.red,
+                      ),
+                    ),
+                    value: statusVal == 'active',
+                    onChanged: (val) {
+                      setState(() {
+                        statusVal = val ? 'active' : 'suspended';
+                      });
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -218,9 +417,13 @@ class _MembersPageState extends State<MembersPage> {
                 }
 
                 if (isEdit) {
+                  // Capture previous state for audit
+                  final prevStatus = member.status;
+
                   final updated = Member(
                     id: member.id,
                     name: name,
+                    memberCode: member.memberCode, // Preserve original code
                     contact: contact,
                     email: email,
                     dob: dob,
@@ -228,16 +431,34 @@ class _MembersPageState extends State<MembersPage> {
                     totalBought: member.totalBought,
                     totalSold: member.totalSold,
                     transactions: member.transactions,
+                    status: statusVal, // New status
+                    nic: member.nic,
+                    address: member.address,
+                    fieldVisitorId: member.fieldVisitorId,
+                    fieldVisitorName: member.fieldVisitorName,
+                    area: member.area,
                   );
+
                   MemberService.updateMember(member.id, updated);
+
+                  AuditService.logAction(
+                    'Member Updated',
+                    'Updated Member: $name (${member.id})${prevStatus != statusVal ? " Status changed to $statusVal" : ""}',
+                    targetUser: name,
+                  );
                 } else {
                   // uniqueness check
                   final exists = MemberService.getMembers().any(
-                    (m) => m.id.toLowerCase() == idVal.toLowerCase(),
+                    (m) =>
+                        m.id.toLowerCase() == idVal.toLowerCase() ||
+                        (m.memberCode != null &&
+                            m.memberCode!.toLowerCase() == idVal.toLowerCase()),
                   );
                   if (exists) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Member ID already exists')),
+                      const SnackBar(
+                        content: Text('Member ID/Code already exists'),
+                      ),
                     );
                     return;
                   }
@@ -250,7 +471,18 @@ class _MembersPageState extends State<MembersPage> {
                     dob: dob,
                     joinedDate: joinedDate,
                   );
-                  MemberService.addMember(created);
+                  // Apply manually set status if needed, though create() usually defaults to active
+                  final msgParam = created.copyWith(
+                    status: statusVal,
+                  ); // Ensure status is set
+
+                  MemberService.addMember(msgParam);
+
+                  AuditService.logAction(
+                    'Member Created',
+                    'Created new Member: $name ($idVal)',
+                    targetUser: name,
+                  );
                 }
 
                 setState(() {});
@@ -265,7 +497,8 @@ class _MembersPageState extends State<MembersPage> {
         );
       },
     );
-  }
+  */
+  } */
 
   Future<void> _importExcel() async {
     try {
@@ -275,6 +508,8 @@ class _MembersPageState extends State<MembersPage> {
       );
 
       if (result == null || result.files.isEmpty) return;
+      final path = result.files.single.path;
+      if (path == null) return;
 
       if (!mounted) return;
       showDialog(
@@ -283,106 +518,30 @@ class _MembersPageState extends State<MembersPage> {
         builder: (c) => const Center(child: CircularProgressIndicator()),
       );
 
-      final fileBytes = File(result.files.single.path!).readAsBytesSync();
-      final excel = Excel.decodeBytes(fileBytes);
-
-      final List<Map<String, dynamic>> rows = [];
-
-      if (excel.tables.isNotEmpty) {
-        final sheet = excel.tables[excel.tables.keys.first];
-        if (sheet != null) {
-          final headers = sheet
-              .row(0)
-              .map((e) => e?.value?.toString() ?? '')
-              .toList();
-
-          for (int i = 1; i < sheet.maxRows; i++) {
-            final row = sheet.row(i);
-            if (row.every((cell) => cell == null || cell.value == null)) {
-              continue;
-            }
-
-            final Map<String, dynamic> rowData = {};
-            for (int j = 0; j < headers.length && j < row.length; j++) {
-              rowData[headers[j]] = row[j]?.value?.toString();
-            }
-            if (rowData.isNotEmpty) {
-              rows.add(rowData);
-            }
-          }
-        }
-      }
-
-      if (rows.isEmpty) {
-        if (mounted) Navigator.pop(context); // close loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No data found in Excel file')),
-        );
-        return;
-      }
-
-      final stats = await MemberService.importMembersExcel(rows);
+      // Call Service (Server-side processing)
+      final res = await MemberService.uploadBulkMembers(File(path));
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading
 
-      final int inserted = stats['data']['insertedCount'] ?? 0;
-      final int updated = stats['data']['updatedCount'] ?? 0;
-      final int skipped = stats['data']['skippedCount'] ?? 0;
-      final List<dynamic> skippedDetails =
-          stats['data']['skippedDetails'] ?? [];
+      final success = res['results']['success'];
+      final failed = res['results']['failed'];
 
-      if (skipped > 0 && skippedDetails.isNotEmpty) {
-        showDialog(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Import Partial/Skipped'),
-            content: SizedBox(
-              height: 200,
-              width: double.maxFinite,
-              child: ListView.builder(
-                itemCount: skippedDetails.length,
-                itemBuilder: (ctx, i) {
-                  final item = skippedDetails[i];
-                  return ListTile(
-                    leading: const Icon(Icons.warning, color: Colors.orange),
-                    title: Text('Row ${item['rowIndex']}'),
-                    subtitle: Text(item['reason'] ?? 'Unknown error'),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(c);
-                  setState(() {});
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Import complete: $inserted inserted, $updated updated, $skipped skipped.',
-            ),
-            backgroundColor: (inserted > 0 || updated > 0)
-                ? Colors.green
-                : Colors.orange,
-          ),
-        );
-        setState(() {});
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload Complete: $success success, $failed failed'),
+          backgroundColor: failed > 0 ? Colors.orange : Colors.green,
+        ),
+      );
+
+      // Refresh
+      setState(() {});
     } catch (e) {
-      if (mounted) {
-        if (Navigator.canPop(context)) Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (!mounted) return;
+      if (Navigator.canPop(context)) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
@@ -451,369 +610,7 @@ class _MembersPageState extends State<MembersPage> {
     );
   }
 
-  void _showMemberDetails(Member member) {
-    showDialog<void>(
-      context: context,
-      builder: (c) => Dialog(
-        backgroundColor: Colors.grey[200], // Background to contrast "paper"
-        insetPadding: const EdgeInsets.all(10),
-        child: Container(
-          width: 500, // Max width for "A4" feel on tablets/desktop
-          constraints: const BoxConstraints(maxHeight: 800),
-          child: Column(
-            children: [
-              // Toolbar
-              Container(
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Print Preview',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                    ),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          icon: const Icon(Icons.edit),
-                          label: const Text('Edit'),
-                          onPressed: () {
-                            Navigator.of(c).pop();
-                            _openAddEditDialog(member: member);
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(c).pop(),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              // "Paper" View
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Header with Logo
-                        Row(
-                          children: [
-                            Container(
-                              width: 60,
-                              height: 60,
-                              decoration: BoxDecoration(
-                                image: const DecorationImage(
-                                  image: AssetImage('assets/nf logo.jpg'),
-                                  fit: BoxFit.contain,
-                                ),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'NATURE FARMING',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green[800],
-                                    ),
-                                  ),
-                                  Text(
-                                    'Member Profile Report',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 16,
-                                      color: Colors.grey[700],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  DateFormat(
-                                    'yyyy-MM-dd',
-                                  ).format(DateTime.now()),
-                                  style: GoogleFonts.outfit(fontSize: 12),
-                                ),
-                                Text(
-                                  'Generated',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        const Divider(thickness: 2, color: Colors.green),
-                        const SizedBox(height: 16),
-                        // Member Details Grid
-                        Text(
-                          'MEMBER DETAILS',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Table(
-                          columnWidths: const {
-                            0: IntrinsicColumnWidth(),
-                            1: FlexColumnWidth(),
-                          },
-                          children: [
-                            _buildInfoRow(
-                              'Member Code',
-                              member.memberCode ?? member.id,
-                            ), // Use memberCode prefers
-                            _buildInfoRow('Full Name', member.name),
-                            _buildInfoRow(
-                              'Assigned To',
-                              member.fieldVisitorName ?? 'Unknown',
-                            ),
-                            _buildInfoRow('NIC', member.nic ?? '-'),
-                            _buildInfoRow(
-                              'Address',
-                              member.address ?? member.area ?? '-',
-                            ),
-                            _buildInfoRow('Contact', member.contact),
-                            _buildInfoRow('Email', member.email),
-                            _buildInfoRow(
-                              'Joined Date',
-                              member.joinedDate != null
-                                  ? DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).format(member.joinedDate!)
-                                  : '-',
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        // Financial Summary
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                color: Colors.green[50],
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      'Total Bought',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                    Text(
-                                      'LKR ${member.totalBought.toStringAsFixed(2)}',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green[800],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                color: Colors.orange[50],
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      'Total Sold',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: Colors.orange,
-                                      ),
-                                    ),
-                                    Text(
-                                      'LKR ${member.totalSold.toStringAsFixed(2)}',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.orange[800],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'TRANSACTION HISTORY',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        FutureBuilder<List<model.Transaction>>(
-                          future: TransactionService.getTransactions(
-                            memberId: member.id,
-                          ),
-                          builder: (context, snapshot) {
-                            if (!snapshot.hasData) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            final txs = snapshot.data!;
-                            if (txs.isEmpty) {
-                              return Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text(
-                                  'No transactions recorded.',
-                                  style: GoogleFonts.outfit(
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              );
-                            }
-                            return Table(
-                              border: TableBorder.all(color: Colors.grey[300]!),
-                              children: [
-                                TableRow(
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[100],
-                                  ),
-                                  children: [
-                                    _buildHeaderCell('Date'),
-                                    _buildHeaderCell('Type'),
-                                    _buildHeaderCell('Desc'),
-                                    _buildHeaderCell(
-                                      'Amount',
-                                      alignRight: true,
-                                    ),
-                                  ],
-                                ),
-                                ...txs.map(
-                                  (t) => TableRow(
-                                    children: [
-                                      _buildCell(
-                                        DateFormat('yyyy-MM-dd').format(t.date),
-                                      ),
-                                      _buildCell(t.type.toUpperCase()),
-                                      _buildCell(t.description),
-                                      _buildCell(
-                                        t.amount.toStringAsFixed(2),
-                                        alignRight: true,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // Print Action
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.all(16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: const Icon(Icons.print),
-                    label: const Text('PRINT TO PDF'),
-                    onPressed: () => _generateAndDownloadPdf(member),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  TableRow _buildInfoRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-          child: Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Text(value, style: GoogleFonts.outfit()),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHeaderCell(String text, {bool alignRight = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12),
-        textAlign: alignRight ? TextAlign.right : TextAlign.left,
-      ),
-    );
-  }
-
-  Widget _buildCell(String text, {bool alignRight = false}) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Text(
-        text,
-        style: GoogleFonts.outfit(fontSize: 12),
-        textAlign: alignRight ? TextAlign.right : TextAlign.left,
-      ),
-    );
-  }
-
-  Future<void> _generateAndDownloadPdf(Member member) async {
+  Future<void> _printMemberReport(Member member) async {
     try {
       final transactions = await TransactionService.getTransactions(
         memberId: member.id,
@@ -1013,13 +810,15 @@ class _MembersPageState extends State<MembersPage> {
                     1: pw.Alignment.centerLeft,
                     2: pw.Alignment.centerLeft,
                     3: pw.Alignment.centerRight,
+                    4: pw.Alignment.centerRight,
                   },
-                  headers: ['Date', 'Type', 'Desc', 'Amount (LKR)'],
+                  headers: ['Date', 'Type', 'Desc', 'Qty', 'Amount (LKR)'],
                   data: transactions.map((t) {
                     return [
                       DateFormat('yyyy-MM-dd').format(t.date),
                       t.type.toUpperCase(),
                       t.description,
+                      '${t.quantity} ${t.unit}',
                       t.amount.toStringAsFixed(2),
                     ];
                   }).toList(),
@@ -1029,19 +828,10 @@ class _MembersPageState extends State<MembersPage> {
         ),
       );
 
-      final directory = await getDownloadsDirectory();
-      // Safe filename
-      final safeName = member.name.replaceAll(RegExp(r'[^\w\s]+'), '');
-      final fileName =
-          'MemberReport_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-      final file = File('${directory?.path}/$fileName');
-      await file.writeAsBytes(await pdf.save());
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Report Saved: $fileName')));
-      }
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'MemberReport_${member.name}',
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1099,6 +889,97 @@ class _MembersPageState extends State<MembersPage> {
     return members;
   }
 
+  void _showMemberDetails(Member member) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final data = member.registrationData;
+        return AlertDialog(
+          title: Text(
+            '${member.name} - Details',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow('Resident DOB', data['resident_dob']),
+                  _buildDetailRow('Education', data['resident_education']),
+                  _buildDetailRow('Occupation', data['resident_occupation']),
+                  const Divider(),
+                  _buildDetailRow(
+                    'Land Size',
+                    '${data['landSize'] ?? '-'} acres',
+                  ),
+                  _buildDetailRow('Quantity Plants', data['quantityPlants']),
+                  _buildDetailRow('Activity', data['activity']),
+                  const Divider(),
+                  _buildDetailRow('Water Facility', data['waterFacility']),
+                  _buildDetailRow('Electricity', data['electricity']),
+                  _buildDetailRow('Machinery', data['machinery']),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, String? value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value ?? '-',
+              style: GoogleFonts.outfit(color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionIcon(
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+    String tooltip,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(icon, color: color, size: 20),
+        onPressed: onTap,
+        tooltip: tooltip,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Local filtering removed as service handles it
@@ -1119,22 +1000,19 @@ class _MembersPageState extends State<MembersPage> {
             tooltip: 'Import Excel',
             onPressed: _importExcel,
           ),
-          IconButton(
-            icon: const Icon(Icons.add_circle),
-            tooltip: 'Add Member',
-            onPressed: () => _openAddEditDialog(),
-          ),
         ],
       ),
       body: Column(
         children: [
           _buildHeaderSummary(),
 
+          // Standardized Filter Row (Search + Sort)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
             child: Row(
               children: [
                 Expanded(
+                  flex: 2,
                   child: TextField(
                     controller: _searchCtrl,
                     style: GoogleFonts.outfit(color: Colors.white),
@@ -1145,8 +1023,56 @@ class _MembersPageState extends State<MembersPage> {
                       fillColor: const Color(0xFF1F2937),
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 0,
+                        horizontal: 10,
+                      ),
                     ),
                     onChanged: _onSearchChanged,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Sort By',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: 0,
+                        horizontal: 10,
+                      ),
+                      filled: true,
+                      fillColor: Color(0xFF1F2937),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<SortOption>(
+                        value: _sortOption,
+                        isExpanded: true,
+                        dropdownColor: const Color(0xFF1F2937),
+                        style: GoogleFonts.outfit(color: Colors.white),
+                        items: const [
+                          DropdownMenuItem(
+                            value: SortOption.recent,
+                            child: Text('Newest First'),
+                          ),
+                          DropdownMenuItem(
+                            value: SortOption.oldest,
+                            child: Text('Oldest First'),
+                          ),
+                          DropdownMenuItem(
+                            value: SortOption.highestBought,
+                            child: Text('Highest Bought'),
+                          ),
+                          DropdownMenuItem(
+                            value: SortOption.highestSold,
+                            child: Text('Highest Sold'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _sortOption = val);
+                        },
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1156,45 +1082,7 @@ class _MembersPageState extends State<MembersPage> {
                     _onSearchChanged('');
                   },
                   icon: const Icon(Icons.clear, color: Colors.grey),
-                ),
-                PopupMenuButton<SortOption>(
-                  icon: const Icon(Icons.filter_list, color: Colors.white),
-                  color: const Color(0xFF1F2937),
-                  onSelected: (option) {
-                    setState(() {
-                      _sortOption = option;
-                    });
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: SortOption.recent,
-                      child: Text(
-                        'Newest First',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: SortOption.oldest,
-                      child: Text(
-                        'Oldest First',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: SortOption.highestBought,
-                      child: Text(
-                        'Highest Bought',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: SortOption.highestSold,
-                      child: Text(
-                        'Highest Sold',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
+                  tooltip: 'Clear Filters',
                 ),
               ],
             ),
@@ -1205,11 +1093,13 @@ class _MembersPageState extends State<MembersPage> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  headingRowHeight: 70, // Prevent overflow
                   headingRowColor: WidgetStateProperty.all(
-                    const Color(0xFF374151),
+                    const Color(0xFF111827),
                   ),
                   dataRowMinHeight: 60,
                   dataRowMaxHeight: 60,
+                  columnSpacing: 12, // Reduced from 20 to fix overflow
                   columns: [
                     DataColumn(
                       label: Text(
@@ -1217,6 +1107,7 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
@@ -1226,6 +1117,7 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
@@ -1235,17 +1127,20 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'FIELD VISITOR',
+                        'FV',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
+                      tooltip: 'Field Visitor',
                     ),
                     DataColumn(
                       label: Text(
@@ -1253,6 +1148,7 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
@@ -1262,6 +1158,7 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
@@ -1271,33 +1168,57 @@ class _MembersPageState extends State<MembersPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'JOINED DATE',
+                        'LAND',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'BOUGHT (LKR)',
+                        'PLANTS',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
                     DataColumn(
                       label: Text(
-                        'SOLD (LKR)',
+                        'JOINED',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'BOUGHT',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'SOLD',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 10,
                         ),
                       ),
                     ),
@@ -1311,166 +1232,493 @@ class _MembersPageState extends State<MembersPage> {
                       ),
                     ),
                   ],
-                  rows: _getSortedMembers().map((m) {
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            m.memberCode?.isNotEmpty == true
-                                ? m.memberCode!
-                                : m.id.length > 8
-                                ? m.id.substring(0, 8)
-                                : m.id,
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.nic ?? '-',
-                            style: GoogleFonts.outfit(color: Colors.white),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              m.name,
-                              style: GoogleFonts.outfit(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.fieldVisitorName ?? '-',
-                            style: GoogleFonts.outfit(color: Colors.white),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.contact,
-                            style: GoogleFonts.outfit(color: Colors.white),
-                          ),
-                        ),
-                        DataCell(
-                          SizedBox(
-                            width: 150,
-                            child: Text(
-                              m.area ?? m.address ?? '-',
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.outfit(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.email,
-                            style: GoogleFonts.outfit(color: Colors.blue[200]),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.joinedDate != null
-                                ? DateFormat('yyyy-MM-dd').format(m.joinedDate!)
-                                : '-',
-                            style: GoogleFonts.outfit(color: Colors.white),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.totalBought.toStringAsFixed(2),
-                            style: GoogleFonts.outfit(
-                              color: Colors.greenAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Text(
-                            m.totalSold.toStringAsFixed(2),
-                            style: GoogleFonts.outfit(
-                              color: Colors.orangeAccent,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.remove_red_eye,
-                                  color: Colors.grey,
+                  rows: [
+                    ..._getSortedMembers().map((m) {
+                      final isEditing =
+                          _editingMemberId == m.id && _editingRow != null;
+                      return DataRow(
+                        color: isEditing
+                            ? WidgetStateProperty.all(const Color(0xFF374151))
+                            : null,
+                        cells: isEditing
+                            ? [
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.memberCode,
+                                    'Code',
+                                  ),
                                 ),
-                                onPressed: () => _showMemberDetails(m),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.download,
-                                  color: Colors.blue,
+                                DataCell(
+                                  _buildInlineField(_editingRow!.nic, 'NIC'),
                                 ),
-                                onPressed: () => _generateAndDownloadPdf(m),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
+                                DataCell(
+                                  _buildInlineField(_editingRow!.name, 'Name'),
                                 ),
-                                onPressed: () => _openAddEditDialog(member: m),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.fieldVisitorId,
+                                    'FV Code',
+                                  ),
                                 ),
-                                onPressed: () async {
-                                  final ok = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      title: const Text('Delete'),
-                                      content: const Text(
-                                        'Delete this member?',
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(c).pop(false),
-                                          child: const Text('Cancel'),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.contact,
+                                    'Phone',
+                                    isPhone: true,
+                                  ),
+                                ),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.address,
+                                    'Address',
+                                  ),
+                                ),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.email,
+                                    'Email',
+                                  ),
+                                ),
+                                const DataCell(SizedBox()), // Land
+                                const DataCell(SizedBox()), // Plants
+                                DataCell(
+                                  Text(
+                                    m.joinedDate != null
+                                        ? DateFormat(
+                                            'yyyy-MM-dd',
+                                          ).format(m.joinedDate!)
+                                        : '-',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    m.totalBought.toStringAsFixed(2),
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.greenAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    m.totalSold.toStringAsFixed(2),
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.orangeAccent,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        icon: const Icon(
+                                          Icons.check,
+                                          color: Colors.green,
                                         ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(c).pop(true),
-                                          child: const Text('Delete'),
+                                        onPressed: () => _saveEditing(m),
+                                        tooltip: 'Save',
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: Colors.red,
+                                        ),
+                                        onPressed: _cancelEditing,
+                                        tooltip: 'Cancel',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ]
+                            : [
+                                // Code
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.memberCode ?? '-',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // NIC
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.nic ?? '-',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Name
+                                DataCell(
+                                  Container(
+                                    width: 120, // Constrained width
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.name,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // FV
+                                DataCell(
+                                  SizedBox(
+                                    width: 80,
+                                    child: Text(
+                                      m.fieldVisitorId ?? '-',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Contact
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.contact,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Address
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      m.area ?? m.address ?? '-',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Email
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      m.email,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.blue[200],
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Land
+                                DataCell(
+                                  Text(
+                                    '${m.registrationData['landSize'] ?? '-'} ac',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                // Plants
+                                DataCell(
+                                  Text(
+                                    m.registrationData['quantityPlants'] ?? '-',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white70,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                // Joined
+                                DataCell(
+                                  Text(
+                                    m.joinedDate != null
+                                        ? DateFormat(
+                                            'yyyy-MM-dd',
+                                          ).format(m.joinedDate!)
+                                        : '-',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                // Bought
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.totalBought.toStringAsFixed(2),
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.greenAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Sold
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      m.totalSold.toStringAsFixed(2),
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.orangeAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Actions
+                                DataCell(
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 150,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        _buildActionIcon(
+                                          Icons.visibility,
+                                          Colors.white,
+                                          () => _showMemberDetails(m),
+                                          'View',
+                                        ),
+                                        _buildActionIcon(
+                                          Icons.edit,
+                                          Colors.blue,
+                                          () => _startEditing(m),
+                                          'Edit',
+                                        ),
+                                        _buildActionIcon(
+                                          Icons.print,
+                                          Colors.grey,
+                                          () => _printMemberReport(m),
+                                          'Print',
+                                        ),
+                                        _buildActionIcon(
+                                          Icons.delete,
+                                          Colors.red,
+                                          () =>
+                                              _deleteMemberWithConfirmation(m),
+                                          'Delete',
                                         ),
                                       ],
                                     ),
-                                  );
-                                  if (ok == true) {
-                                    MemberService.deleteMember(m.id);
-                                    setState(() {});
-                                  }
-                                },
+                                  ),
+                                ),
+                              ],
+                      );
+                    }),
+                    ..._newRows.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final row = entry.value;
+                      return DataRow(
+                        color: WidgetStateProperty.all(const Color(0xFF1F2937)),
+                        cells: [
+                          DataCell(
+                            Text(
+                              'AUTO',
+                              style: GoogleFonts.outfit(
+                                color: Colors.grey,
+                                fontSize: 10,
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                          DataCell(_buildInlineField(row.nic, 'NIC')),
+                          DataCell(_buildInlineField(row.name, 'Name')),
+                          DataCell(
+                            _buildInlineField(row.fieldVisitorId, 'FV Code'),
+                          ),
+                          DataCell(
+                            _buildInlineField(
+                              row.contact,
+                              'Phone',
+                              isPhone: true,
+                            ),
+                          ),
+                          DataCell(_buildInlineField(row.address, 'Address')),
+                          DataCell(_buildInlineField(row.email, 'Email')),
+                          const DataCell(SizedBox()), // Land
+                          const DataCell(SizedBox()), // Plants
+                          DataCell(
+                            Text(
+                              DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                              style: GoogleFonts.outfit(color: Colors.white),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '0.00',
+                              style: GoogleFonts.outfit(color: Colors.white),
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              '0.00',
+                              style: GoogleFonts.outfit(color: Colors.white),
+                            ),
+                          ),
+                          DataCell(
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.check,
+                                    color: Colors.green,
+                                  ),
+                                  onPressed: () => _saveInlineRow(row, index),
+                                  tooltip: 'Save',
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      row.dispose();
+                                      _newRows.removeAt(index);
+                                    });
+                                  },
+                                  tooltip: 'Cancel',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
                 ),
+              ),
+            ),
+          ),
+          // Add Button Bar
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: const Color(0xFF111827),
+            child: ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _newRows.add(_InlineMemberRow());
+                });
+                // Scroll to end logic if possible, or user just sees it
+              },
+              icon: const Icon(Icons.add_circle, color: Colors.white),
+              label: Text(
+                'ADD NEW MEMBER (INLINE)',
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1F2937),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Colors.white, width: 0.5),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteMemberWithConfirmation(Member member) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text('Are you sure you want to delete ${member.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      if (!mounted) return;
+
+      try {
+        await MemberService.deleteMember(member.id);
+
+        AuditService.logAction(
+          'Member Deleted',
+          'Deleted Member: ${member.name} (${member.id})',
+          targetUser: member.name,
+        );
+
+        if (!mounted) return;
+        setState(() {});
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Member deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting member: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -1531,5 +1779,31 @@ class _LineChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _LineChartPainter oldDelegate) {
     return oldDelegate.points != points;
+  }
+}
+
+class _InlineMemberRow {
+  final TextEditingController name = TextEditingController();
+  final TextEditingController contact = TextEditingController();
+  final TextEditingController email = TextEditingController();
+  final TextEditingController nic = TextEditingController();
+  final TextEditingController address = TextEditingController();
+  final TextEditingController memberCode = TextEditingController();
+  final TextEditingController area = TextEditingController();
+
+  final TextEditingController fieldVisitorId = TextEditingController();
+
+  DateTime dob = DateTime(1990);
+  DateTime joinedDate = DateTime.now();
+
+  void dispose() {
+    name.dispose();
+    contact.dispose();
+    email.dispose();
+    nic.dispose();
+    address.dispose();
+    memberCode.dispose();
+    area.dispose();
+    fieldVisitorId.dispose();
   }
 }

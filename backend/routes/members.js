@@ -55,4 +55,19 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// PATCH toggle member status
+router.patch('/:id/status', async (req, res) => {
+    try {
+        const member = await Member.findById(req.params.id);
+        if (!member) return res.status(404).json({ message: 'Member not found' });
+
+        const newStatus = member.status === 'active' ? 'inactive' : 'active';
+        await Member.findByIdAndUpdate(req.params.id, { $set: { status: newStatus } });
+
+        res.json({ ...member._doc, status: newStatus });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
 module.exports = router;

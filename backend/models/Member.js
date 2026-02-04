@@ -10,12 +10,20 @@ const TransactionSchema = new mongoose.Schema({
 
 const MemberSchema = new mongoose.Schema({
     name: { type: String, required: true },
+    memberId: { type: String, unique: true, sparse: true }, // Custom ID
     contact: { type: String, required: true },
     email: { type: String, default: '' },
+    nic: { type: String, default: '' },
+    address: { type: String, default: '' },
+    branchName: { type: String, default: '' },
+    branchId: { type: String, default: '' },
+    fieldVisitorId: { type: mongoose.Schema.Types.ObjectId, ref: 'FieldVisitor' },
+    registrationData: { type: mongoose.Schema.Types.Mixed },
     dob: { type: Date },
     joinedDate: { type: Date, default: Date.now },
     totalBought: { type: Number, default: 0 },
     totalSold: { type: Number, default: 0 },
+    status: { type: String, default: 'active' },
     transactions: [TransactionSchema]
 });
 

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -8,8 +9,8 @@ import '../services/auth_service.dart';
 import '../services/product_service.dart';
 import '../services/employee_service.dart';
 import '../services/member_service.dart';
-import '../services/transaction_service.dart';
-import '../models/transaction.dart';
+import '../services/health_service.dart';
+
 import 'employee_page.dart';
 import 'members_page.dart';
 import 'product_page.dart';
@@ -18,6 +19,7 @@ import 'reports/report_screen.dart';
 import 'messaging/bulk_message_screen.dart';
 import 'settings_screen.dart';
 import 'approvals_screen.dart';
+import 'analysis_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -28,25 +30,48 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
-  List<Transaction> _allTransactions = [];
-
-  // ... (keep existing code)
+  Timer? _timer;
+  bool _isDbConnected = false;
+  bool _isCheckingDb = true;
 
   @override
   void initState() {
     super.initState();
+    _checkConnectivity();
     _fetchData();
+    // Refresh data every 30 seconds to keep counts live
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _checkConnectivity();
+      _fetchData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkConnectivity() async {
+    final connected = await HealthService.checkConnection();
+    if (mounted) {
+      setState(() {
+        _isDbConnected = connected;
+        _isCheckingDb = false;
+      });
+    }
   }
 
   Future<void> _fetchData() async {
     await ProductService.init();
     await EmployeeService.init();
     await MemberService.init();
-    final txs = await TransactionService.getTransactions();
     if (mounted) {
-      setState(() {
-        _allTransactions = txs;
-      });
+      try {
+        setState(() {});
+      } catch (e) {
+        // Safe set state
+      }
     }
   }
 
@@ -85,28 +110,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // ... (keep existing code)
 
-  List<List<double>> _monthlyMemberBuySell() {
-    final now = DateTime.now();
-    final buy = List<double>.filled(12, 0.0);
-    final sell = List<double>.filled(12, 0.0);
-
-    for (final t in _allTransactions) {
-      final dt = t.date;
-      for (int i = 0; i < 12; i++) {
-        final monthDate = DateTime(now.year, now.month - 11 + i, 1);
-        if (dt.year == monthDate.year && dt.month == monthDate.month) {
-          if (t.type == 'buy') buy[i] += t.amount;
-          if (t.type == 'sell') sell[i] += t.amount;
-        }
-      }
-    }
-    return [buy, sell];
-  }
-
   List<Map<String, dynamic>> _topSellingProducts(int limit) {
     final products = ProductService.getProducts();
     final list = products.map((p) {
-      final revenue = p.soldPerMonth * p.price;
+      final revenue = p.totalSoldValue - p.totalBoughtValue;
       return {'product': p, 'revenue': revenue};
     }).toList();
     list.sort(
@@ -224,202 +231,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.all(8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.1),
-        border: Border.all(color: Colors.green),
+        color: _isCheckingDb
+            ? Colors.orange.withValues(alpha: 0.1)
+            : _isDbConnected
+            ? Colors.green.withValues(alpha: 0.1)
+            : Colors.red.withValues(alpha: 0.1),
+        border: Border.all(
+          color: _isCheckingDb
+              ? Colors.orange
+              : _isDbConnected
+              ? Colors.green
+              : Colors.red,
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          Icon(
+            _isCheckingDb
+                ? Icons.refresh
+                : _isDbConnected
+                ? Icons.check_circle
+                : Icons.error,
+            color: _isCheckingDb
+                ? Colors.orange
+                : _isDbConnected
+                ? Colors.green
+                : Colors.red,
+            size: 20,
+          ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'System Online',
-            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: _isCheckingDb
+                  ? Colors.orange
+                  : _isDbConnected
+                  ? Colors.green
+                  : Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const Spacer(),
           Text(
-            'Database: Connected',
-            style: TextStyle(color: Colors.green[800], fontSize: 12),
+            _isCheckingDb
+                ? 'Database: Checking...'
+                : _isDbConnected
+                ? 'Database: Connected'
+                : 'Database: Disconnected',
+            style: TextStyle(
+              color: _isCheckingDb
+                  ? Colors.orange[800]
+                  : _isDbConnected
+                  ? Colors.green[800]
+                  : Colors.red[800],
+              fontSize: 12,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGlobalSearch() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: TextField(
-        decoration: InputDecoration(
-          hintText: 'Search Database (Members, Staff, Products)...',
-          prefixIcon: const Icon(Icons.search),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
-        ),
-        onSubmitted: (value) {
-          if (value.trim().isEmpty) return;
-          final query = value.trim().toLowerCase();
-
-          final members = MemberService.getMembers()
-              .where(
-                (m) =>
-                    m.name.toLowerCase().contains(query) ||
-                    m.id.toLowerCase().contains(query),
-              )
-              .toList();
-
-          final employees = EmployeeService.getEmployees()
-              .where(
-                (e) =>
-                    e.fullName.toLowerCase().contains(query) ||
-                    e.userId.toLowerCase().contains(query),
-              )
-              .toList();
-
-          final products = ProductService.getProducts()
-              .where((p) => p.name.toLowerCase().contains(query))
-              .toList();
-
-          showDialog(
-            context: context,
-            builder: (context) => Dialog(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                constraints: const BoxConstraints(maxHeight: 600),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Search Results: "$value"',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Divider(),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (members.isEmpty &&
-                                employees.isEmpty &&
-                                products.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.all(16),
-                                child: Text('No results found.'),
-                              ),
-
-                            if (members.isNotEmpty) ...[
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8),
-                                child: Text(
-                                  'Members',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
-                                  ),
-                                ),
-                              ),
-                              ...members.map(
-                                (m) => ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.person),
-                                  title: Text(m.name),
-                                  subtitle: Text(m.id),
-                                  trailing: const Icon(
-                                    Icons.visibility,
-                                    size: 16,
-                                  ),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    setState(() => _selectedIndex = 3);
-                                  },
-                                ),
-                              ),
-                            ],
-
-                            if (employees.isNotEmpty) ...[
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8),
-                                child: Text(
-                                  'Staff',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ),
-                              ...employees.map(
-                                (e) => ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.badge),
-                                  title: Text(e.fullName),
-                                  subtitle: Text(e.role),
-                                  trailing: const Icon(
-                                    Icons.visibility,
-                                    size: 16,
-                                  ),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    setState(() => _selectedIndex = 2);
-                                  },
-                                ),
-                              ),
-                            ],
-
-                            if (products.isNotEmpty) ...[
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 8),
-                                child: Text(
-                                  'Products',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.orange,
-                                  ),
-                                ),
-                              ),
-                              ...products.map(
-                                (p) => ListTile(
-                                  dense: true,
-                                  leading: const Icon(Icons.inventory_2),
-                                  title: Text(p.name),
-                                  subtitle: Text('LKR ${p.price}'),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    setState(() => _selectedIndex = 1);
-                                  },
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildDashboardAnalytics() {
-    final income = ProductService.totalSelling();
-    final outcome = ProductService.totalBuying();
-    final incomeSeries = ProductService.monthlyIncome();
-    final outcomeSeries = ProductService.monthlyOutcome();
     final memberTotal = MemberService.getMembers().length;
     final memberSeries = _monthlyNewMembers();
     final memberBought = MemberService.getMembers().fold<double>(
@@ -443,88 +317,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           _buildSystemStatus(),
-          _buildGlobalSearch(),
           _buildQuickActions(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _cardMetric(
-                    'Total Income',
-                    'LKR ${income.toStringAsFixed(2)}',
-                    icon: Icons.trending_up,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _cardMetric(
-                    'Total Outcome',
-                    'LKR ${outcome.toStringAsFixed(2)}',
-                    icon: Icons.trending_down,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Products - Income vs Outcome',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 100,
-                      child: _MiniLineChart.doubleSeries(
-                        incomeSeries,
-                        outcomeSeries,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _cardMetric(
-                    'Members',
-                    '$memberTotal',
-                    icon: Icons.group,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _cardMetric(
-                    'Bought',
-                    'LKR ${memberBought.toStringAsFixed(2)}',
-                    icon: Icons.shopping_cart,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _cardMetric(
-                    'Sold',
-                    'LKR ${memberSold.toStringAsFixed(2)}',
-                    icon: Icons.store,
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final double width = constraints.maxWidth;
+                final int crossAxisCount = width > 600 ? 3 : 2;
+                return GridView.count(
+                  crossAxisCount: crossAxisCount,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: width > 600 ? 3.5 : 2.8,
+                  children: [
+                    _cardMetric('Members', '$memberTotal', icon: Icons.group),
+                    _cardMetric(
+                      'Total Bought',
+                      'LKR ${memberBought.toStringAsFixed(2)}',
+                      icon: Icons.shopping_cart,
+                    ),
+                    _cardMetric(
+                      'Total Sold',
+                      'LKR ${memberSold.toStringAsFixed(2)}',
+                      icon: Icons.store,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Padding(
@@ -556,32 +379,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 6),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _cardMetric(
-                    'Staff',
-                    '$employeeTotal',
-                    icon: Icons.people_alt,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _cardMetric(
-                    'Branch Managers',
-                    '${positionCounts['Branch Manager'] ?? 0}',
-                    icon: Icons.admin_panel_settings,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _cardMetric(
-                    'Field Visitors',
-                    '${positionCounts['Field Visitor'] ?? 0}',
-                    icon: Icons.hiking,
-                  ),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final double width = constraints.maxWidth;
+                final int crossAxisCount = width > 600 ? 4 : 2;
+                return GridView.count(
+                  crossAxisCount: crossAxisCount,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: width > 600 ? 3.2 : 2.5,
+                  children: [
+                    _cardMetric(
+                      'Staff',
+                      '$employeeTotal',
+                      icon: Icons.people_alt,
+                    ),
+                    _cardMetric(
+                      'Branch Managers',
+                      '${positionCounts['Branch Manager'] ?? 0}',
+                      icon: Icons.admin_panel_settings,
+                    ),
+                    _cardMetric(
+                      'Field Visitors',
+                      '${positionCounts['Field Visitor'] ?? 0}',
+                      icon: Icons.hiking,
+                    ),
+                    _cardMetric(
+                      'IT Sector',
+                      '${positionCounts['IT Sector'] ?? 0}',
+                      icon: Icons.computer,
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Padding(
@@ -635,16 +467,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         visualDensity: VisualDensity.compact,
                         title: Text(
                           prod.name,
-                          style: const TextStyle(fontSize: 13),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        subtitle: Text(
-                          'Revenue: LKR ${revenue.toStringAsFixed(2)}',
-                          style: const TextStyle(fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Net Revenue: LKR ${revenue.toStringAsFixed(2)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ],
                         ),
-                        trailing: Text(
-                          'Stock: ${prod.currentStock}',
-                          style: const TextStyle(fontSize: 11),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Stock: ${prod.currentStock} ${prod.unit}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            // Optional: Show status if low stock?
+                          ],
                         ),
+                        isThreeLine: true,
                       );
                     }),
                   ],
@@ -652,40 +503,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(10.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Members - Buy vs Sell',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 100,
-                      child: Builder(
-                        builder: (context) {
-                          final series = _monthlyMemberBuySell();
-                          return _MiniLineChart.doubleSeries(
-                            series[0],
-                            series[1],
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
             child: Card(
@@ -904,7 +722,12 @@ class AppDrawer extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
             ),
           ),
-          _buildDrawerItem(text: 'Analysis', onTap: () {}),
+          _buildDrawerItem(
+            text: 'Analysis',
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const AnalysisPage())),
+          ),
         ],
       ),
     );
@@ -928,10 +751,6 @@ class _MiniLineChart extends StatelessWidget {
 
   factory _MiniLineChart.points(List<int> pts) {
     return _MiniLineChart._(pts.map((e) => e.toDouble()).toList(), null, pts);
-  }
-
-  factory _MiniLineChart.doubleSeries(List<double> a, List<double> b) {
-    return _MiniLineChart._(a, b, null);
   }
 
   @override

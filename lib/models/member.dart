@@ -14,8 +14,10 @@ class Member {
   final String? address;
   final String? memberCode;
   final String? area;
+  final String? fieldVisitorId;
   final String? fieldVisitorName;
   final List<Transaction> transactions;
+  final Map<String, dynamic> registrationData;
 
   Member({
     required this.id,
@@ -31,8 +33,10 @@ class Member {
     this.address,
     this.memberCode,
     this.area,
+    this.fieldVisitorId,
     this.fieldVisitorName,
     required this.transactions,
+    this.registrationData = const {},
   });
 
   factory Member.fromJson(Map<String, dynamic> json) {
@@ -54,7 +58,11 @@ class Member {
       address: json['address'] as String?,
       memberCode: json['memberCode'] as String?,
       area: json['area'] as String?,
+      fieldVisitorId: json['fieldVisitorId'] as String?,
       fieldVisitorName: json['fieldVisitorName'] as String?,
+      registrationData: json['registrationData'] is Map<String, dynamic>
+          ? json['registrationData'] as Map<String, dynamic>
+          : {},
       transactions:
           [], // Transactions are not returned in list view from NF backend for performance
     );
@@ -73,6 +81,48 @@ class Member {
     'address': address,
     'memberCode': memberCode,
     'area': area,
+    'fieldVisitorId': fieldVisitorId,
     'fieldVisitorName': fieldVisitorName,
+    'registrationData': registrationData,
   };
+
+  Member copyWith({
+    String? id,
+    String? name,
+    String? contact,
+    String? email,
+    DateTime? dob,
+    DateTime? joinedDate,
+    double? totalBought,
+    double? totalSold,
+    String? status,
+    String? nic,
+    String? address,
+    String? memberCode,
+    String? area,
+    String? fieldVisitorId,
+    String? fieldVisitorName,
+    List<Transaction>? transactions,
+    Map<String, dynamic>? registrationData,
+  }) {
+    return Member(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      contact: contact ?? this.contact,
+      email: email ?? this.email,
+      dob: dob ?? this.dob,
+      joinedDate: joinedDate ?? this.joinedDate,
+      totalBought: totalBought ?? this.totalBought,
+      totalSold: totalSold ?? this.totalSold,
+      status: status ?? this.status,
+      nic: nic ?? this.nic,
+      address: address ?? this.address,
+      memberCode: memberCode ?? this.memberCode,
+      area: area ?? this.area,
+      fieldVisitorId: fieldVisitorId ?? this.fieldVisitorId,
+      fieldVisitorName: fieldVisitorName ?? this.fieldVisitorName,
+      transactions: transactions ?? this.transactions,
+      registrationData: registrationData ?? this.registrationData,
+    );
+  }
 }

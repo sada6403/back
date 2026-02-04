@@ -42,8 +42,7 @@ class BulkEmployeeRow {
 class BulkEntryDialog extends StatefulWidget {
   final VoidCallback onSaveComplete;
 
-  const BulkEntryDialog({Key? key, required this.onSaveComplete})
-    : super(key: key);
+  const BulkEntryDialog({super.key, required this.onSaveComplete});
 
   @override
   State<BulkEntryDialog> createState() => _BulkEntryDialogState();

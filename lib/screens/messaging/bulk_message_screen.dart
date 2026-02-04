@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../services/member_service.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+
+import '../../config/api_config.dart';
 
 class BulkMessageScreen extends StatefulWidget {
   const BulkMessageScreen({super.key});
@@ -9,22 +14,52 @@ class BulkMessageScreen extends StatefulWidget {
 }
 
 class _BulkMessageScreenState extends State<BulkMessageScreen> {
-  final TextEditingController _messageController = TextEditingController();
+  // SMS Tab Controllers
+  final TextEditingController _smsMessageController = TextEditingController();
+  bool _smsSendToManagers = false;
+  bool _smsSendToFVs = false;
+  bool _smsSendToMembers = false;
 
-  bool _sendToManagers = false;
-  bool _sendToFVs = false;
-  bool _sendToMembers = false;
+  // Email Tab Controllers
+  final TextEditingController _emailMessageController = TextEditingController();
+  bool _emailSendToManagers = false;
+  bool _emailSendToFVs = false;
+  bool _emailSendToMembers = false;
+  // PlatformFile? _selectedFile;
+
   bool _isLoading = false;
 
-  Future<void> _sendWishes() async {
-    if (_messageController.text.trim().isEmpty) {
+  // Future<void> _pickFile() async {
+  //   FilePickerResult? result = await FilePicker.platform.pickFiles();
+  //   if (result != null) {
+  //     setState(() {
+  //       _selectedFile = result.files.first;
+  //     });
+  //   }
+  // }
+
+  // void _removeFile() {
+  //   setState(() {
+  //     _selectedFile = null;
+  //   });
+  // }
+
+  Future<void> _sendWishes(bool isEmail) async {
+    final messageCtrl = isEmail
+        ? _emailMessageController
+        : _smsMessageController;
+    final toManagers = isEmail ? _emailSendToManagers : _smsSendToManagers;
+    final toFVs = isEmail ? _emailSendToFVs : _smsSendToFVs;
+    final toMembers = isEmail ? _emailSendToMembers : _smsSendToMembers;
+
+    if (messageCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Please enter a message')));
       return;
     }
 
-    if (!_sendToManagers && !_sendToFVs && !_sendToMembers) {
+    if (!toManagers && !toFVs && !toMembers) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please select at least one recipient group'),
@@ -35,94 +70,241 @@ class _BulkMessageScreenState extends State<BulkMessageScreen> {
 
     setState(() => _isLoading = true);
 
-    // Simulate sending process
-    // In production, this would call a backend API
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final List<String> roleGroups = [];
+      if (toManagers) roleGroups.add('manager');
+      if (toFVs) roleGroups.add('field_visitor');
+      if (toMembers) roleGroups.add('member');
 
-    int count = 0;
-    if (_sendToManagers) count += 5; // Mock count
-    if (_sendToFVs) count += 10; // Mock count
-    if (_sendToMembers) count += MemberService.getMembers().length;
+      final url = Uri.parse('${ApiConfig.baseUrl}/sms/bulk');
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Sent "${_messageController.text}" to $count recipients successfully!',
-          ),
-        ),
-      );
-      _messageController.clear();
-      setState(() {
-        _sendToManagers = false;
-        _sendToFVs = false;
-        _sendToMembers = false;
-        _isLoading = false;
-      });
+      var request = http.MultipartRequest('POST', url);
+      request.headers['Authorization'] = 'Bearer $token';
+
+      request.fields['message'] = messageCtrl.text;
+      request.fields['sendViaEmail'] = isEmail.toString();
+      request.fields['roles'] = jsonEncode(roleGroups);
+
+      // if (isEmail && _selectedFile != null && _selectedFile!.path != null) {
+      //   request.files.add(
+      //     await http.MultipartFile.fromPath('attachment', _selectedFile!.path!),
+      //   );
+      // }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Success: ${body['message']}')));
+        messageCtrl.clear();
+        setState(() {
+          if (isEmail) {
+            _emailSendToManagers = false;
+            _emailSendToFVs = false;
+            _emailSendToMembers = false;
+            // _selectedFile = null;
+          } else {
+            _smsSendToManagers = false;
+            _smsSendToFVs = false;
+            _smsSendToMembers = false;
+          }
+        });
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed: ${response.body}')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Widget _buildRecipientCheckbox(
+    String title,
+    bool value,
+    Function(bool?) onChanged,
+  ) {
+    return CheckboxListTile(
+      title: Text(title),
+      value: value,
+      onChanged: onChanged,
+      contentPadding: EdgeInsets.zero,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Send Wishes / Messages')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Send Notifications / Email'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(icon: Icon(Icons.message), text: 'SMS / Notification'),
+              Tab(icon: Icon(Icons.email), text: 'Email'),
+            ],
+          ),
+        ),
+        body: TabBarView(
           children: [
-            const Text(
-              'Compose Message',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _messageController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText:
-                    'Enter your wish or message here... (e.g. Happy New Year!)',
-                border: OutlineInputBorder(),
+            // SMS / Notification Tab
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Send App Notification (SMS Fallback)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _smsMessageController,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter short notification message...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Recipients',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Managers',
+                      _smsSendToManagers,
+                      (v) => setState(() => _smsSendToManagers = v ?? false),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Field Visitors',
+                      _smsSendToFVs,
+                      (v) => setState(() => _smsSendToFVs = v ?? false),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Members',
+                      _smsSendToMembers,
+                      (v) => setState(() => _smsSendToMembers = v ?? false),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : () => _sendWishes(false),
+                        icon: _isLoading
+                            ? const CircularProgressIndicator()
+                            : const Icon(Icons.send),
+                        label: Text(
+                          _isLoading ? 'Sending...' : 'Send Notification',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Select Recipients',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            CheckboxListTile(
-              title: const Text('All Managers'),
-              value: _sendToManagers,
-              onChanged: (val) =>
-                  setState(() => _sendToManagers = val ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('All Field Visitors'),
-              value: _sendToFVs,
-              onChanged: (val) => setState(() => _sendToFVs = val ?? false),
-            ),
-            CheckboxListTile(
-              title: const Text('All Members'),
-              value: _sendToMembers,
-              onChanged: (val) => setState(() => _sendToMembers = val ?? false),
-            ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _sendWishes,
-                icon: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send),
-                label: Text(_isLoading ? 'Sending...' : 'Send Message'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
+
+            // Email Tab
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Send Professional Email',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _emailMessageController,
+                      maxLines: 6,
+                      decoration: const InputDecoration(
+                        hintText: 'Enter detailed email content...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // File Picker
+                    // Row(
+                    //   children: [
+                    //     ElevatedButton.icon(
+                    //       onPressed: _pickFile,
+                    //       icon: const Icon(Icons.attach_file),
+                    //       label: const Text('Attach File'),
+                    //       style: ElevatedButton.styleFrom(
+                    //         backgroundColor: Colors.grey[800],
+                    //         foregroundColor: Colors.white,
+                    //       ),
+                    //     ),
+                    //     const SizedBox(width: 10),
+                    //     if (_selectedFile != null)
+                    //       Expanded(
+                    //         child: Chip(
+                    //           label: Text(_selectedFile!.name),
+                    //           onDeleted: _removeFile,
+                    //         ),
+                    //       ),
+                    //   ],
+                    // ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Recipients',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Managers',
+                      _emailSendToManagers,
+                      (v) => setState(() => _emailSendToManagers = v ?? false),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Field Visitors',
+                      _emailSendToFVs,
+                      (v) => setState(() => _emailSendToFVs = v ?? false),
+                    ),
+                    _buildRecipientCheckbox(
+                      'All Members',
+                      _emailSendToMembers,
+                      (v) => setState(() => _emailSendToMembers = v ?? false),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : () => _sendWishes(true),
+                        icon: _isLoading
+                            ? const CircularProgressIndicator()
+                            : const Icon(Icons.email),
+                        label: Text(_isLoading ? 'Sending...' : 'Send Email'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

@@ -251,8 +251,122 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
+
+            const SizedBox(height: 40),
+            Divider(color: Colors.grey[300]),
+            const SizedBox(height: 20),
+
+            Text(
+              'Staff Actions',
+              style: GoogleFonts.outfit(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.refresh, color: Colors.redAccent),
+              title: Text('Reset Staff Password', style: GoogleFonts.outfit()),
+              subtitle: Text(
+                'Generate and email new password via User ID',
+                style: GoogleFonts.outfit(fontSize: 12),
+              ),
+              onTap: () => _showResetPasswordDialog(),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showResetPasswordDialog() {
+    final TextEditingController userIdCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          'Reset Staff Password',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Enter the User ID of the staff member. A new password will be generated and sent to their registered email.',
+              style: GoogleFonts.outfit(fontSize: 14),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: userIdCtrl,
+              decoration: const InputDecoration(
+                labelText: 'User ID',
+                hintText: 'e.g. FV-KM-001',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              'CANCEL',
+              style: GoogleFonts.outfit(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              final userId = userIdCtrl.text.trim();
+              if (userId.isEmpty) return;
+
+              Navigator.pop(dialogContext); // Close dialog using dialogContext
+
+              setState(() => _isLoading = true);
+
+              try {
+                final result = await EmployeeService.resetPassword(userId);
+
+                if (!mounted) return;
+
+                setState(() {
+                  _isLoading = false;
+                  _statusMessage =
+                      result['message'] ?? 'Password reset successful.';
+                  _statusColor = Colors.green;
+                });
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_statusMessage, style: GoogleFonts.outfit()),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                if (!mounted) return;
+
+                setState(() {
+                  _isLoading = false;
+                  _statusMessage = e.toString().contains('Exception: ')
+                      ? e.toString().replaceAll('Exception: ', '')
+                      : e.toString();
+                  _statusColor = Colors.red;
+                });
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(_statusMessage, style: GoogleFonts.outfit()),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+            child: Text(
+              'RESET & SEND EMAIL',
+              style: GoogleFonts.outfit(color: Colors.white),
+            ),
+          ),
+        ],
       ),
     );
   }

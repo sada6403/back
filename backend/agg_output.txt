@@ -1,0 +1,5 @@
+Running Aggregation...
+Results:
+- Aloe Vera Leaf: Stock 312, Sold Val 0, Bought Val 9984, Txs 1
+- Aloe Vera Packets: Stock 0, Sold Val 0, Bought Val 0, Txs 0
+- Aloe Vera Plant: Stock 1003, Sold Val 0, Bought Val 32096, Txs 11

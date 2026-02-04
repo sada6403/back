@@ -2,21 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/login_page.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
 import 'services/audit_service.dart';
-import 'config/api_config.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load connection settings
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString('api_base_url');
-    if (url != null && url.isNotEmpty) {
-      ApiConfig.setBaseUrl(url);
-    }
-
     // Initialize services that need local storage
     await AuditService.init(); // Load audit logs
   } catch (e) {

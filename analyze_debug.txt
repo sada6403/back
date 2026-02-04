@@ -1,0 +1,7 @@
+Analyzing Management_IT...                                      
+
+   info - The imported package 'flutter_test' isn't a dependency of the importing package - lib\test\widget_test.dart:9:8 - depend_on_referenced_packages
+   info - The imported package 'lib' isn't a dependency of the importing package - lib\test\widget_test.dart:11:8 - depend_on_referenced_packages
+  error - Target of URI doesn't exist: 'package:lib/main.dart' - lib\test\widget_test.dart:11:8 - uri_does_not_exist
+  error - The name 'MyApp' isn't a class - lib\test\widget_test.dart:16:35 - creation_with_non_type
+

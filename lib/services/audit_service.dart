@@ -43,9 +43,16 @@ class AuditService {
   static Future<void> _sendToBackend(Map<String, dynamic> entry) async {
     try {
       await http.post(
-        Uri.parse(ApiConfig.auditLogs),
+        Uri.parse('${ApiConfig.baseUrl}/analysis/activity'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(entry),
+        body: jsonEncode({
+          'userId': AuthService.userId ?? 'Unknown',
+          'username': AuthService.firstName,
+          'role': AuthService.role,
+          'action': entry['action'],
+          'details': entry['details'],
+          'target': entry['targetUser'],
+        }),
       );
     } catch (_) {
       // Fail silently if offline or endpoint missing, log is saved locally

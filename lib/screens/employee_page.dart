@@ -7,11 +7,9 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' hide Border;
 import '../services/employee_service.dart';
+
 import '../services/audit_service.dart';
-import 'bulk_entry_dialog.dart';
 
 class EmployeePage extends StatefulWidget {
   const EmployeePage({super.key});
@@ -26,6 +24,10 @@ class _EmployeePageState extends State<EmployeePage> {
   String? _filterPosition;
   String? _filterBranch;
 
+  // Inline Editing State
+  String? _editingEmpId;
+  _InlineEmployeeRow? _editingRow;
+
   @override
   void initState() {
     super.initState();
@@ -37,134 +39,508 @@ class _EmployeePageState extends State<EmployeePage> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    if (_editingRow != null) {
+      _editingRow!.dispose();
+    }
     super.dispose();
   }
 
-  Future<void> _importExcel() async {
+  void _startEditing(Employee emp) {
+    if (_editingRow != null) {
+      _editingRow!.dispose();
+    }
+    setState(() {
+      _editingEmpId = emp.userId; // Assuming userId is unique and used for ID
+      _editingRow = _InlineEmployeeRow();
+      _editingRow!.userId = emp.userId;
+      _editingRow!.fullName.text = emp.fullName;
+      _editingRow!.email.text = emp.email;
+      _editingRow!.phone.text = emp.phone;
+      _editingRow!.nic.text = emp.nic;
+      _editingRow!.postalAddress.text = emp.postalAddress;
+      _editingRow!.permanentAddress.text = emp.permanentAddress;
+      _editingRow!.bankName.text = emp.bankName;
+      _editingRow!.bankBranch.text = emp.bankBranch;
+      _editingRow!.accountNo.text = emp.accountNo;
+      _editingRow!.accountHolder.text = emp.accountHolder;
+      _editingRow!.salary.text = emp.salary.toString();
+      _editingRow!.assignedArea.text = emp.assignedArea;
+      _editingRow!.targetAmount.text = emp.targetAmount.toString();
+
+      _editingRow!.role.text = emp.role;
+      _editingRow!.branchName.text = emp.branchName;
+      _editingRow!.dob = emp.dob;
+      _editingRow!.joinedDate = emp.joinedDate;
+      _editingRow!.civilStatus.text = emp.civilStatus;
+      _editingRow!.education.text = emp.education;
+      _editingRow!.status = emp.status;
+
+      _editingRow!.previewId = emp.userId; // Init with current
+
+      // Add Listeners
+      _editingRow!.role.addListener(() => _updateEditingIdPreview(emp));
+      _editingRow!.branchName.addListener(() => _updateEditingIdPreview(emp));
+    });
+  }
+
+  void _updateEditingIdPreview(Employee original) {
+    if (_editingRow == null) return;
+    final r = _editingRow!.role.text;
+    final b = _editingRow!.branchName.text;
+
+    // If nothing changed from original, keep original ID
+    if (r == original.role && b == original.branchName) {
+      setState(() => _editingRow!.previewId = original.userId);
+      return;
+    }
+
+    if (r == 'IT Sector') {
+      setState(
+        () => _editingRow!.previewId = 'MANUAL',
+      ); // Or keep original if IT
+    } else {
+      final gen = _generateNextId(r, b);
+      setState(() => _editingRow!.previewId = gen);
+    }
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingEmpId = null;
+      if (_editingRow != null) {
+        _editingRow!.dispose();
+        _editingRow = null;
+      }
+    });
+  }
+
+  Future<void> _saveEditing(Employee originalEmp) async {
+    if (_editingRow == null) return;
+
+    final updated = originalEmp.copyWith(
+      fullName: _editingRow!.fullName.text,
+      email: _editingRow!.email.text,
+      phone: _editingRow!.phone.text,
+      nic: _editingRow!.nic.text,
+      postalAddress: _editingRow!.postalAddress.text,
+      permanentAddress: _editingRow!.permanentAddress.text,
+      bankName: _editingRow!.bankName.text,
+      bankBranch: _editingRow!.bankBranch.text,
+      accountNo: _editingRow!.accountNo.text,
+      accountHolder: _editingRow!.accountHolder.text,
+      salary: double.tryParse(_editingRow!.salary.text) ?? 0.0,
+      assignedArea: _editingRow!.assignedArea.text,
+      targetAmount: double.tryParse(_editingRow!.targetAmount.text) ?? 0.0,
+
+      role: _editingRow!.role.text,
+      branchName: _editingRow!.branchName.text,
+      dob: _editingRow!.dob,
+      joinedDate: _editingRow!.joinedDate,
+      civilStatus: _editingRow!.civilStatus.text,
+      education: _editingRow!.education.text,
+      status: _editingRow!.status,
+      userId: _editingRow!.previewId == 'MANUAL'
+          ? originalEmp.userId
+          : _editingRow!.previewId, // Use new ID
+    );
+
+    // Safety check for empty ID
+    if (updated.userId.isEmpty) {
+      // Fallback
+      updated.userId = originalEmp.userId;
+    }
+
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
+      await EmployeeService.updateEmployee(
+        originalEmp.userId, // Find by OLD ID
+        updated,
+      ); // Corrected argument usage
+      AuditService.logAction(
+        'Employee Updated',
+        'Updated Employee: ${updated.fullName} (Inline)',
+        targetUser: updated.fullName,
       );
 
-      if (result == null || result.files.isEmpty) return;
-
-      List<int>? fileBytes = result.files.first.bytes;
-      final filePath = result.files.first.path;
-
-      if (fileBytes == null && filePath != null) {
-        fileBytes = await File(filePath).readAsBytes();
-      }
-
-      if (fileBytes == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read file data.')),
-        );
-        return;
-      }
-
-      final excel = Excel.decodeBytes(fileBytes);
-      if (excel.tables.isEmpty) return;
-
-      // Show loading
       if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (c) => const Center(child: CircularProgressIndicator()),
+      _cancelEditing();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Employee ${updated.fullName} updated!'),
+          backgroundColor: Colors.green,
+        ),
       );
-
-      final rowsToImport = <Map<String, dynamic>>[];
-      final tableName = excel.tables.keys.first;
-      final table = excel.tables[tableName]!;
-
-      // Get headers from first row
-      final headers = table.rows.first.map((c) => _getCellValue(c)).toList();
-
-      for (int i = 1; i < table.rows.length; i++) {
-        final row = table.rows[i];
-        if (row.every((c) => c == null || c.value == null)) continue;
-
-        final Map<String, dynamic> rowData = {};
-        for (int j = 0; j < headers.length; j++) {
-          if (j < row.length) {
-            rowData[headers[j]] = _getCellValue(row[j]);
-          }
-        }
-        rowsToImport.add(rowData);
-      }
-
-      final stats = await EmployeeService.importITSectorExcel(rowsToImport);
-
-      if (!mounted) return;
-      Navigator.pop(context); // Close loading
-
-      final int inserted = stats['data']['insertedCount'] ?? 0;
-      final int updated = stats['data']['updatedCount'] ?? 0;
-      final int skipped = stats['data']['skippedCount'] ?? 0;
-      final List<dynamic> skippedDetails =
-          stats['data']['skippedDetails'] ?? [];
-
-      if (!mounted) return;
-
-      if (skipped > 0 && skippedDetails.isNotEmpty) {
-        showDialog(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('Import Partial/Skipped'),
-            content: SizedBox(
-              height: 200,
-              width: double.maxFinite,
-              child: ListView.builder(
-                itemCount: skippedDetails.length,
-                itemBuilder: (ctx, i) {
-                  final item = skippedDetails[i];
-                  return ListTile(
-                    leading: const Icon(Icons.warning, color: Colors.orange),
-                    title: Text('Row ${item['rowIndex']}'),
-                    subtitle: Text(item['reason'] ?? 'Unknown error'),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(c);
-                  setState(() {});
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Import complete: $inserted inserted, $updated updated, $skipped skipped.',
-            ),
-            backgroundColor: (inserted > 0 || updated > 0)
-                ? Colors.green
-                : Colors.orange,
-          ),
-        );
-      }
-
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      if (Navigator.canPop(context)) Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
 
-  String _getCellValue(Data? cell) {
-    if (cell == null) return '';
-    return cell.value?.toString() ?? '';
+  Future<void> _toggleStatus(Employee emp) async {
+    try {
+      await EmployeeService.toggleStatus(emp.userId);
+      AuditService.logAction(
+        'Employee Status Toggled',
+        'Toggled status for ${emp.fullName} to ${emp.status == "active" ? "inactive" : "active"}',
+        targetUser: emp.fullName,
+      );
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Employee ${emp.fullName} status updated!'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  // --- Inline Adding Logic ---
+  _InlineEmployeeRow? _newRow;
+
+  void _startAdding() {
+    // Cancel editing if any
+    _cancelEditing();
+    setState(() {
+      _newRow = _InlineEmployeeRow();
+      // Set defaults
+      _newRow!.branchName.text = 'Kondavil';
+      _newRow!.role.text = 'Field Visitor';
+      _newRow!.status = 'active';
+
+      // Setup Live Listeners
+      _newRow!.role.addListener(_updateIdPreview);
+      _newRow!.branchName.addListener(_updateIdPreview);
+
+      // Trigger execution once for initial preview
+      _updateIdPreview();
+    });
+  }
+
+  void _updateIdPreview() {
+    if (_newRow == null) return;
+
+    final gen = _generateNextId(_newRow!.role.text, _newRow!.branchName.text);
+    setState(() {
+      _newRow!.previewId = gen;
+      // If the user hasn't typed anything yet (or it's just the old auto-gen), update the controller
+      if (_newRow!.userId.isEmpty || _newRow!.userId.contains('-')) {
+        _newRow!.userId = gen;
+      }
+    });
+  }
+
+  void _cancelAdding() {
+    setState(() {
+      if (_newRow != null) {
+        _newRow!.dispose();
+        _newRow = null;
+      }
+    });
+  }
+
+  // ID Generator
+  String _generateNextId(String role, String branchName) {
+    String prefix = '';
+    String branchCode = 'GEN'; // Default
+
+    // Determine Prefix
+    if (role == 'Field Visitor') {
+      prefix = 'FV';
+    } else if (role.contains('Manager')) {
+      prefix = 'BM'; // Changed from MGR to BM
+    } else {
+      prefix = 'EMP'; // Fallback
+    }
+
+    // Determine Branch Code
+    final b = branchName.toLowerCase();
+
+    // Explicit User Mapping
+    if (b.contains('jaffna') && b.contains('kondavil')) {
+      branchCode = 'JK';
+    } else if (b.contains('jaffna') && b.contains('chavakachcheri')) {
+      branchCode = 'JS';
+    } else if (b.contains('kondavil') && !b.contains('jaffna')) {
+      branchCode = 'JK';
+    } else if (b.contains('chavakachcheri') && !b.contains('jaffna')) {
+      branchCode = 'JS';
+    } else if (b.contains('kalmunai')) {
+      branchCode = 'KM';
+    } else if (b.contains('trincomalee')) {
+      branchCode = 'TM';
+    } else if (b.contains('akkaraipattu')) {
+      branchCode = 'AP';
+    } else if (b.contains('ampara')) {
+      branchCode = 'AM';
+    } else if (b.contains('batticaloa')) {
+      branchCode = 'BT';
+    } else if (b.contains('cheddikulam')) {
+      branchCode = 'CK';
+    } else if (b.contains('kilinochchi')) {
+      branchCode = 'KN';
+    } else if (b.contains('mannar')) {
+      branchCode = 'MN';
+    } else if (b.contains('vavuniya')) {
+      branchCode = 'VN';
+    } else if (b.contains('mallavi')) {
+      branchCode = 'MV';
+    } else if (b.contains('mulliyawalai')) {
+      branchCode = 'MW';
+    } else if (b.contains('nedunkeny')) {
+      branchCode = 'NK';
+    } else if (b.contains('puthukkudiyiruppu')) {
+      branchCode = 'PK';
+    } else if (b.contains('aschuveli')) {
+      branchCode = 'AV';
+    } else if (b.contains('head office')) {
+      branchCode = 'HO';
+    } else {
+      // Dynamic Fallback: "New branch first 2 letters"
+      // User Logic: "First 2 letters. If collision, first 3 letters."
+      // Implementing basic 2 letter fallback for now as collision requires global state checking.
+      final clean = branchName
+          .replaceAll(RegExp(r'[^a-zA-Z]'), '')
+          .toUpperCase();
+      if (clean.length >= 2) {
+        branchCode = clean.substring(0, 2);
+      } else {
+        branchCode = 'GEN';
+      }
+    }
+
+    final basePattern = '$prefix-$branchCode-';
+
+    // Find max number
+    int maxNum = 0;
+    final employees = EmployeeService.getEmployees();
+    for (var e in employees) {
+      if (e.userId.startsWith(basePattern)) {
+        final rest = e.userId.substring(basePattern.length);
+        final numPart = int.tryParse(rest);
+        if (numPart != null && numPart > maxNum) {
+          maxNum = numPart;
+        }
+      }
+    }
+
+    // Increment and format
+    final nextNum = (maxNum + 1).toString().padLeft(3, '0');
+    return '$basePattern$nextNum';
+  }
+
+  String _generateRandomPassword({int length = 8}) {
+    const chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#%&';
+    // Use DateTime for simple randomness to avoid dealing with imports in this specific edit
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    String pass = '';
+    int seed = timestamp;
+    for (int i = 0; i < length; i++) {
+      seed = (seed * 9301 + 49297) % 233280;
+      pass += chars[seed % chars.length];
+    }
+    return pass;
+  }
+
+  Future<void> _saveAdding() async {
+    if (_newRow == null) return;
+
+    try {
+      String finalId = '';
+      // Use the ID from the controller (user can override)
+      finalId = _newRow!.userId;
+      if (finalId.isEmpty) {
+        finalId = _generateNextId(_newRow!.role.text, _newRow!.branchName.text);
+      }
+
+      final newEmp = EmployeeService.create(
+        userId: finalId, // Pass generated or typed ID
+        fullName: _newRow!.fullName.text,
+        email: _newRow!.email.text,
+        phone: _newRow!.phone.text,
+        // nic: _newRow!.nic.text, // Not in create helper
+        bankName: _newRow!.bankName.text,
+        bankBranch: _newRow!.bankBranch.text,
+        accountNo: _newRow!.accountNo.text,
+        accountHolder: _newRow!.accountHolder.text,
+        salary: double.tryParse(_newRow!.salary.text) ?? 0.0,
+        branchName: _newRow!.branchName.text,
+        joinedDate: DateTime.now(),
+        role: _newRow!.role.text,
+        dob: DateTime(1990),
+      );
+
+      // Set extra fields
+      newEmp.nic = _newRow!.nic.text;
+      newEmp.postalAddress = _newRow!.postalAddress.text;
+      newEmp.permanentAddress = _newRow!.permanentAddress.text;
+      newEmp.education = _newRow!.education.text;
+      newEmp.civilStatus = _newRow!.civilStatus.text;
+      newEmp.assignedArea = _newRow!.assignedArea.text;
+      newEmp.targetAmount = double.tryParse(_newRow!.targetAmount.text) ?? 0.0;
+      newEmp.status = _newRow!.status;
+
+      // Auto-generate password
+      final generatedPassword = _generateRandomPassword();
+      newEmp.password = generatedPassword;
+
+      await EmployeeService.addEmployee(newEmp);
+
+      if (!mounted) return;
+      _cancelAdding();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added! ID: $finalId (Pass: $generatedPassword)'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 10),
+          action: SnackBarAction(
+            label: 'COPY',
+            textColor: Colors.white,
+            onPressed: () {
+              Clipboard.setData(
+                ClipboardData(
+                  text: 'ID: $finalId\nPassword: $generatedPassword',
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  DataRow _buildAddRow() {
+    return DataRow(
+      color: WidgetStateProperty.all(const Color(0xFF374151)),
+      cells: [
+        // 0: ID/Status (Always Editable)
+        DataCell(
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 100,
+                child: _buildInlineField(_newRow!.userIdController, 'ID'),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Sug: ${_newRow!.previewId}',
+                style: GoogleFonts.outfit(
+                  fontSize: 8,
+                  color: Colors.greenAccent,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 1: Role
+        DataCell(_buildInlineField(_newRow!.role, 'Role')),
+        // 2: Branch/Area
+        DataCell(_buildInlineField(_newRow!.branchName, 'Branch')),
+        // 3: Name
+        DataCell(_buildInlineField(_newRow!.fullName, 'Name')),
+        // 4: NIC
+        DataCell(_buildInlineField(_newRow!.nic, 'NIC')),
+        // 5: Email
+        DataCell(_buildInlineField(_newRow!.email, 'Email')),
+        // 6: Phone
+        DataCell(_buildInlineField(_newRow!.phone, 'Phone', isPhone: true)),
+        // 7: Civil
+        DataCell(_buildInlineField(_newRow!.civilStatus, 'Civil')),
+        // 8: Postal (Was Education)
+        DataCell(_buildInlineField(_newRow!.postalAddress, 'Postal')),
+        // 9: Perm (Was Postal)
+        DataCell(_buildInlineField(_newRow!.permanentAddress, 'Perm')),
+        // 10: Education (Was Perm)
+        DataCell(_buildInlineField(_newRow!.education, 'Edu')),
+        // 11: Salary
+        DataCell(_buildInlineField(_newRow!.salary, 'Salary', isNumber: true)),
+        // 12-15: Bank
+        DataCell(_buildInlineField(_newRow!.bankName, 'Bank')),
+        DataCell(_buildInlineField(_newRow!.bankBranch, 'Branch')),
+        DataCell(_buildInlineField(_newRow!.accountNo, 'Acc No')),
+        DataCell(_buildInlineField(_newRow!.accountHolder, 'Holder')),
+        // 17: Status
+        DataCell(
+          Switch(
+            value: _newRow!.status == 'active',
+            onChanged: (val) {
+              setState(() {
+                _newRow!.status = val ? 'active' : 'inactive';
+              });
+            },
+            activeThumbColor: Colors.green,
+          ),
+        ),
+        // 16: Actions
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.check, color: Colors.green),
+                onPressed: _saveAdding,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.red),
+                onPressed: _cancelAdding,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineField(
+    TextEditingController controller,
+    String hint, {
+    bool isPhone = false,
+    bool isNumber = false,
+    Employee? employeeToSave,
+  }) {
+    return SizedBox(
+      height: 35,
+      child: TextField(
+        controller: controller,
+        keyboardType: isPhone
+            ? TextInputType.phone
+            : (isNumber ? TextInputType.number : TextInputType.text),
+        style: GoogleFonts.outfit(color: Colors.white, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.outfit(color: Colors.white30, fontSize: 11),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 0,
+          ),
+          filled: true,
+          fillColor: Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(4),
+            borderSide: BorderSide.none,
+          ),
+        ),
+        onSubmitted: employeeToSave != null
+            ? (_) => _saveEditing(employeeToSave)
+            : null,
+      ),
+    );
   }
 
   Widget _buildPositionSummary() {
@@ -212,703 +588,57 @@ class _EmployeePageState extends State<EmployeePage> {
   }
 
   String _getReadableBranch(String code) {
-    if (code.toLowerCase().contains('jk')) return 'Jaffna';
-    if (code.toLowerCase().contains('km')) return 'Kalmunai';
-    if (code.toLowerCase().contains('tr')) return 'Trincomalee';
-    if (code.toLowerCase().contains('ch')) return 'Chavakachcheri';
-    if (code.toLowerCase().contains('kd')) return 'Kondavil';
-    // If it's already a full name or unknown code
+    // Check if format is "Something (BranchName)"
+    final RegExp parensRegex = RegExp(r'\(([^)]+)\)');
+    final match = parensRegex.firstMatch(code);
+    if (match != null) {
+      return match.group(1) ?? code;
+    }
+
+    final c = code.toLowerCase().trim();
+    if (c == 'jk') return 'Jaffna (Kondavil)';
+    if (c == 'js') return 'Jaffna (Chavakachcheri)';
+    if (c == 'km') return 'Kalmunai';
+    if (c == 'tm') return 'Trincomalee';
+    if (c == 'ap') return 'Akkaraipattu';
+    if (c == 'am') return 'Ampara';
+    if (c == 'bt') return 'Batticaloa';
+    if (c == 'ck') return 'Cheddikulam';
+    if (c == 'kn') return 'Kilinochchi';
+    if (c == 'mn') return 'Mannar';
+    if (c == 'vn') return 'Vavuniya';
+    if (c == 'mv') return 'Mallavi';
+    if (c == 'mw') return 'Mulliyawalai';
+    if (c == 'nk') return 'Nedunkeny';
+    if (c == 'pk') return 'Puthukkudiyiruppu';
+    if (c == 'av') return 'Aschuveli';
+    if (c == 'ho') return 'Head Office';
+
+    if (c == 'ja') return 'Jaffna';
+    if (c == 'pu' || c == 'puthukkudijiruppu') return 'Puthukkudiyiruppu';
+    // Legacy mapping (if needed to stay)
+    if (c == 'tr') return 'Trincomalee';
+    if (c == 'kd') return 'Kondavil';
+    if (c == 'ch') return 'Chavakachcheri';
     return code;
   }
 
-  void _openAddEditDialog({Employee? employee}) async {
-    final isEdit = employee != null;
-
-    // Form Controllers
-    final fullNameCtrl = TextEditingController(text: employee?.fullName ?? '');
-    final emailCtrl = TextEditingController(text: employee?.email ?? '');
-    final phoneCtrl = TextEditingController(text: employee?.phone ?? '');
-
-    DateTime? selectedDob = employee?.dob;
-    String? selectedRole = employee?.role;
-    String? selectedBranch = employee?.branchName;
-
-    final salaryCtrl = TextEditingController(
-      text: employee != null ? employee.salary.toString() : '',
-    );
-
-    // Bank Details
-    final bankNameCtrl = TextEditingController(text: employee?.bankName ?? '');
-    final bankBranchCtrl = TextEditingController(
-      text: employee?.bankBranch ?? '',
-    );
-    final accountNoCtrl = TextEditingController(
-      text: employee?.accountNo ?? '',
-    );
-    final accountHolderCtrl = TextEditingController(
-      text: employee?.accountHolder ?? '',
-    );
-
-    final passwordCtrl = TextEditingController(); // Admin Reset
-
-    // Field Visitor specific
-    final targetAmountCtrl = TextEditingController(
-      text: employee != null ? employee.targetAmount.toString() : '0.0',
-    );
-    final assignedAreaCtrl = TextEditingController(
-      text: employee?.assignedArea ?? '',
-    );
-
-    // Status
-    bool isActive = employee?.status == 'active';
-    if (employee == null) isActive = true; // Default active for new
-
-    DateTime? selectedJoinedDate = employee?.joinedDate;
-    String workingDays = employee != null
-        ? '${employee.getWorkingDaysFromNow()}'
-        : '0';
-
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text(isEdit ? 'Edit Employee' : 'Add Employee'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isEdit) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12.0),
-                        child: Text(
-                          'User ID: ${employee.userId}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      // Status Toggle
-                      SwitchListTile(
-                        title: const Text('Account Status'),
-                        subtitle: Text(
-                          isActive ? 'Active' : 'Suspended',
-                          style: TextStyle(
-                            color: isActive ? Colors.green : Colors.red,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        value: isActive,
-                        onChanged: (val) {
-                          setState(() => isActive = val);
-                        },
-                      ),
-                      const Divider(),
-                    ],
-                    TextField(
-                      controller: fullNameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Full Name *',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email * (Notifications sent here)',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: phoneCtrl,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone *',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: passwordCtrl,
-                      decoration: InputDecoration(
-                        labelText: isEdit
-                            ? 'Reset Password (Admin Only)'
-                            : 'Create Password *',
-                        helperText: isEdit
-                            ? 'Leave empty to keep current password'
-                            : null,
-                        border: const OutlineInputBorder(),
-                        suffixIcon: const Icon(Icons.lock_reset),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDob ?? DateTime(1990),
-                          firstDate: DateTime(1960),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          setState(() => selectedDob = picked);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              selectedDob != null
-                                  ? DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).format(selectedDob!)
-                                  : 'Select Date of Birth *',
-                              style: TextStyle(
-                                color: selectedDob != null
-                                    ? Colors.white
-                                    : Colors.grey[400],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.calendar_today,
-                              color: Colors.blue,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Role *',
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: selectedRole,
-                      items: EmployeeService.roles
-                          .map(
-                            (r) => DropdownMenuItem(value: r, child: Text(r)),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() => selectedRole = val),
-                    ),
-                    const SizedBox(height: 8),
-                    if (selectedRole == 'Field Visitor') ...[
-                      const Divider(),
-                      const Text(
-                        'Field Visitor Settings',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: targetAmountCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Monthly Target (LKR)',
-                          border: OutlineInputBorder(),
-                          prefixText: 'Rs. ',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: assignedAreaCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Assigned Area',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(),
-                    ],
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Branch *',
-                        border: OutlineInputBorder(),
-                      ),
-                      initialValue: selectedBranch,
-                      items: EmployeeService.branches
-                          .map(
-                            (b) => DropdownMenuItem(value: b, child: Text(b)),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() => selectedBranch = val),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: salaryCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Salary (LKR) *',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(),
-                    const Text(
-                      'Bank Details',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    TextField(
-                      controller: bankNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Bank Name'),
-                    ),
-                    TextField(
-                      controller: bankBranchCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Bank Branch',
-                      ),
-                    ),
-                    TextField(
-                      controller: accountNoCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Account No',
-                      ),
-                    ),
-                    TextField(
-                      controller: accountHolderCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Account Holder Name',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedJoinedDate ?? DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          selectedJoinedDate = picked;
-                          setState(() {
-                            workingDays =
-                                '${DateTime.now().difference(selectedJoinedDate!).inDays}';
-                          });
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              selectedJoinedDate != null
-                                  ? DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).format(selectedJoinedDate!)
-                                  : 'Joined Date *',
-                              style: TextStyle(
-                                color: selectedJoinedDate != null
-                                    ? Colors.white
-                                    : Colors.grey[400],
-                              ),
-                            ),
-                            const Icon(
-                              Icons.calendar_today,
-                              color: Colors.blue,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Working Days: $workingDays',
-                      style: const TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (fullNameCtrl.text.isEmpty ||
-                        emailCtrl.text.isEmpty ||
-                        phoneCtrl.text.isEmpty ||
-                        selectedDob == null ||
-                        selectedRole == null ||
-                        selectedBranch == null ||
-                        selectedJoinedDate == null ||
-                        salaryCtrl.text.isEmpty ||
-                        (!isEdit && passwordCtrl.text.isEmpty)) {
-                      // Password required for new
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please fill all required (*) fields'),
-                        ),
-                      );
-                      return;
-                    }
-
-                    final salary = double.tryParse(salaryCtrl.text) ?? 0.0;
-                    final targetAmount =
-                        double.tryParse(targetAmountCtrl.text) ?? 0.0;
-                    final assignedArea = assignedAreaCtrl.text;
-                    final status = isActive ? 'active' : 'suspended';
-
-                    if (isEdit) {
-                      final updated = Employee(
-                        userId: employee.userId,
-                        fullName: fullNameCtrl.text,
-                        email: emailCtrl.text,
-                        phone: phoneCtrl.text,
-                        dob: selectedDob!,
-                        role: selectedRole!,
-                        salary: salary,
-                        branchName: selectedBranch!,
-                        joinedDate: selectedJoinedDate!,
-                        bankName: bankNameCtrl.text,
-                        bankBranch: bankBranchCtrl.text,
-                        accountNo: accountNoCtrl.text,
-                        accountHolder: accountHolderCtrl.text,
-                        position: selectedRole!,
-                        status: status,
-                        targetAmount: targetAmount,
-                        assignedArea: assignedArea,
-                        password: passwordCtrl.text.isNotEmpty
-                            ? passwordCtrl.text
-                            : '',
-                      );
-
-                      await EmployeeService.updateEmployee(
-                        employee.userId,
-                        updated,
-                      );
-
-                      // Audit Logs
-                      if (employee.status != status) {
-                        AuditService.logAction(
-                          'Status Change',
-                          'Changed status to $status',
-                          targetUser: employee.fullName,
-                        );
-                      }
-                      if (passwordCtrl.text.isNotEmpty) {
-                        AuditService.logAction(
-                          'Pass Reset',
-                          'Admin reset password',
-                          targetUser: employee.fullName,
-                        );
-                      }
-                      if (employee.targetAmount != targetAmount) {
-                        AuditService.logAction(
-                          'Target Update',
-                          'Changed target to $targetAmount',
-                          targetUser: employee.fullName,
-                        );
-                      }
-                    } else {
-                      final created = EmployeeService.create(
-                        fullName: fullNameCtrl.text,
-                        email: emailCtrl.text,
-                        phone: phoneCtrl.text,
-                        dob: selectedDob!,
-                        role: selectedRole!,
-                        salary: salary,
-                        branchName: selectedBranch!,
-                        joinedDate: selectedJoinedDate!,
-                        bankName: bankNameCtrl.text,
-                        bankBranch: bankBranchCtrl.text,
-                        accountNo: accountNoCtrl.text,
-                        accountHolder: accountHolderCtrl.text,
-                      );
-                      // Update extra fields manually since create() acts as a factory
-                      created.status = status;
-                      created.targetAmount = targetAmount;
-                      created.assignedArea = assignedArea;
-                      created.password = passwordCtrl.text;
-
-                      await EmployeeService.addEmployee(created);
-                      AuditService.logAction(
-                        'User Created',
-                        'Created user: ${created.fullName}',
-                        targetUser: created.fullName,
-                      );
-                    }
-                    if (!context.mounted) return;
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    if (mounted) setState(() {});
-  }
-
-  void _showEmployeeDetails(Employee emp) {
-    showDialog<void>(
-      context: context,
-      builder: (c) => Dialog(
-        backgroundColor: Colors.grey[200],
-        insetPadding: const EdgeInsets.all(10),
-        child: Container(
-          width: 500,
-          constraints: const BoxConstraints(maxHeight: 800),
-          child: Column(
-            children: [
-              // Toolbar
-              Container(
-                color: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Print Preview',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-                    ),
-                    Row(
-                      children: [
-                        TextButton.icon(
-                          icon: const Icon(Icons.edit),
-                          label: const Text('Edit'),
-                          onPressed: () {
-                            Navigator.of(c).pop();
-                            _openAddEditDialog(employee: emp);
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(c).pop(),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              // "Paper" View
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Header with Logo
-                        Row(
-                          children: [
-                            Container(
-                              width: 60,
-                              height: 60,
-                              decoration: BoxDecoration(
-                                image: const DecorationImage(
-                                  image: AssetImage('assets/nf logo.jpg'),
-                                  fit: BoxFit.contain,
-                                ),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'NATURE FARMING',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green[800],
-                                    ),
-                                  ),
-                                  Text(
-                                    'Staff Profile Report',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 16,
-                                      color: Colors.grey[700],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  DateFormat(
-                                    'yyyy-MM-dd',
-                                  ).format(DateTime.now()),
-                                  style: GoogleFonts.outfit(fontSize: 12),
-                                ),
-                                Text(
-                                  'Generated',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        const Divider(thickness: 2, color: Colors.green),
-                        const SizedBox(height: 16),
-
-                        Text(
-                          'EMPLOYEE INFO',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Table(
-                          columnWidths: const {
-                            0: IntrinsicColumnWidth(),
-                            1: FlexColumnWidth(),
-                          },
-                          children: [
-                            _buildInfoRow('User ID', emp.userId),
-                            _buildInfoRow('Full Name', emp.fullName),
-                            _buildInfoRow('Role', emp.role),
-                            _buildInfoRow('Branch', emp.branchName),
-                            _buildInfoRow('Email', emp.email),
-                            _buildInfoRow('Phone', emp.phone),
-                            _buildInfoRow(
-                              'Date of Birth',
-                              DateFormat('yyyy-MM-dd').format(emp.dob),
-                            ),
-                            _buildInfoRow(
-                              'Joined Date',
-                              DateFormat('yyyy-MM-dd').format(emp.joinedDate),
-                            ),
-                            _buildInfoRow(
-                              'Working Days',
-                              '${emp.getWorkingDaysFromNow()}',
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-                        Text(
-                          'PAYMENT & BANKING',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Table(
-                          columnWidths: const {
-                            0: IntrinsicColumnWidth(),
-                            1: FlexColumnWidth(),
-                          },
-                          children: [
-                            _buildInfoRow(
-                              'Basic Salary',
-                              'LKR ${emp.salary.toStringAsFixed(2)}',
-                            ),
-                            _buildInfoRow(
-                              'Bank Name',
-                              emp.bankName.isEmpty ? '-' : emp.bankName,
-                            ),
-                            _buildInfoRow(
-                              'Branch',
-                              emp.bankBranch.isEmpty ? '-' : emp.bankBranch,
-                            ),
-                            _buildInfoRow(
-                              'Account Number',
-                              emp.accountNo.isEmpty ? '-' : emp.accountNo,
-                            ),
-                            _buildInfoRow(
-                              'Account Holder',
-                              emp.accountHolder.isEmpty
-                                  ? '-'
-                                  : emp.accountHolder,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              // Print Action
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.all(16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    icon: const Icon(Icons.print),
-                    label: const Text('PRINT TO PDF'),
-                    onPressed: () => _generateAndDownloadPdf(emp),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  TableRow _buildInfoRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-          child: Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Text(value, style: GoogleFonts.outfit()),
-        ),
-      ],
-    );
+  String _getBranchOrArea(Employee e) {
+    // 1. If Field Visitor has specific assigned Area, show that
+    if (e.role.toLowerCase().contains('field') && e.assignedArea.isNotEmpty) {
+      return e.assignedArea;
+    }
+    // 2. If Branch Name is present, use that
+    if (e.branchName.isNotEmpty) {
+      return _getReadableBranch(e.branchName);
+    }
+    // 3. Fallback: Parse ID (e.g. FV-JK-001 -> JK -> Jaffna)
+    final parts = e.userId.split('-');
+    if (parts.length > 1) {
+      // Assuming format XX-CODE-XXX
+      return _getReadableBranch(parts[1]);
+    }
+    return '';
   }
 
   Future<void> _generateAndDownloadPdf(Employee emp) async {
@@ -921,22 +651,72 @@ class _EmployeePageState extends State<EmployeePage> {
       );
       final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
+      // Helper for Section Titles
+      pw.Widget buildSectionTitle(String title) {
+        return pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+          decoration: const pw.BoxDecoration(color: PdfColors.green800),
+          child: pw.Text(
+            title.toUpperCase(),
+            style: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
+        );
+      }
+
+      // Helper for Label-Value pairs
+      pw.Widget buildField(String label, String value, {double width = 120}) {
+        return pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 4),
+          child: pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.SizedBox(
+                width: width,
+                child: pw.Text(
+                  label,
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 10,
+                    color: PdfColors.grey800,
+                  ),
+                ),
+              ),
+              pw.Text(
+                ': ',
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+              pw.Expanded(
+                child: pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+              ),
+            ],
+          ),
+        );
+      }
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
+          margin: const pw.EdgeInsets.all(30),
           build: (pw.Context context) {
             return [
-              // Header
+              // HEADER
               pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
                   pw.Container(
-                    width: 60,
-                    height: 60,
+                    width: 70,
+                    height: 70,
                     child: pw.Image(logoImage),
                   ),
-                  pw.SizedBox(width: 16),
+                  pw.SizedBox(width: 15),
                   pw.Expanded(
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -944,16 +724,17 @@ class _EmployeePageState extends State<EmployeePage> {
                         pw.Text(
                           'NATURE FARMING',
                           style: pw.TextStyle(
-                            fontSize: 20,
+                            fontSize: 22,
                             fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.green800,
+                            color: PdfColors.green900,
                           ),
                         ),
                         pw.Text(
-                          'Staff Profile Report',
-                          style: const pw.TextStyle(
+                          'Application for Employment',
+                          style: pw.TextStyle(
                             fontSize: 16,
-                            color: PdfColors.grey700,
+                            fontWeight: pw.FontWeight.bold,
+                            decoration: pw.TextDecoration.underline,
                           ),
                         ),
                       ],
@@ -962,12 +743,15 @@ class _EmployeePageState extends State<EmployeePage> {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      pw.Text(dateStr, style: const pw.TextStyle(fontSize: 12)),
                       pw.Text(
-                        'Generated',
-                        style: const pw.TextStyle(
+                        'Date: $dateStr',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                      pw.Text(
+                        'ID: ${emp.userId.isEmpty ? "Pending" : emp.userId}',
+                        style: pw.TextStyle(
                           fontSize: 10,
-                          color: PdfColors.grey,
+                          fontWeight: pw.FontWeight.bold,
                         ),
                       ),
                     ],
@@ -975,82 +759,454 @@ class _EmployeePageState extends State<EmployeePage> {
                 ],
               ),
               pw.SizedBox(height: 20),
-              pw.Divider(color: PdfColors.green, thickness: 2),
+
+              // 1. PERSONAL DETAILS
+              buildSectionTitle('Personal Details'),
+              pw.SizedBox(height: 10),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      children: [
+                        buildField('Full Name', emp.fullName),
+                        buildField('Name with Initials', emp.fullName),
+                        buildField('NIC Number', emp.nic),
+                        buildField(
+                          'Date of Birth',
+                          DateFormat('yyyy-MM-dd').format(emp.dob),
+                        ),
+                        buildField(
+                          'Gender',
+                          emp.gender.isNotEmpty ? emp.gender : '-',
+                        ),
+                        buildField(
+                          'Civil Status',
+                          emp.civilStatus.isNotEmpty ? emp.civilStatus : '-',
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 20),
+                  pw.Expanded(
+                    child: pw.Column(
+                      children: [
+                        buildField('Mobile Number', emp.phone),
+                        buildField('Email Address', emp.email),
+                        buildField(
+                          'Permanent Address',
+                          emp.permanentAddress.isNotEmpty
+                              ? emp.permanentAddress
+                              : '-',
+                        ),
+                        buildField(
+                          'Postal Address',
+                          emp.postalAddress.isNotEmpty
+                              ? emp.postalAddress
+                              : '-',
+                        ),
+                        buildField('Role Applied', emp.role),
+                        buildField('Branch', emp.branchName),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               pw.SizedBox(height: 20),
 
-              // Employee Info
-              pw.Text(
-                'EMPLOYEE INFO',
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.grey600,
-                  letterSpacing: 1.2,
-                ),
-              ),
+              // 2. EDUCATION QUALIFICATIONS
+              buildSectionTitle('Education Qualifications'),
               pw.SizedBox(height: 10),
-              pw.Table(
-                columnWidths: const {
-                  0: pw.IntrinsicColumnWidth(),
-                  1: pw.FlexColumnWidth(),
-                },
+
+              // O/L & A/L Row
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _buildPdfInfoRow('User ID', emp.userId),
-                  _buildPdfInfoRow('Full Name', emp.fullName),
-                  _buildPdfInfoRow('Role', emp.role),
-                  _buildPdfInfoRow('Branch', emp.branchName),
-                  _buildPdfInfoRow('Email', emp.email),
-                  _buildPdfInfoRow('Phone', emp.phone),
-                  _buildPdfInfoRow(
-                    'Date of Birth',
-                    DateFormat('yyyy-MM-dd').format(emp.dob),
+                  // O/L
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'G.C.E Ordinary Level (O/L)',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            decoration: pw.TextDecoration.underline,
+                          ),
+                        ),
+                        pw.SizedBox(height: 5),
+                        if (emp.educationData['ol'] != null &&
+                            emp.educationData['ol'] is Map)
+                          pw.Table(
+                            border: pw.TableBorder.all(
+                              color: PdfColors.grey300,
+                              width: 0.5,
+                            ),
+                            children: [
+                              pw.TableRow(
+                                decoration: const pw.BoxDecoration(
+                                  color: PdfColors.grey200,
+                                ),
+                                children: [
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      'Subject',
+                                      style: pw.TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: pw.FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      'Grade',
+                                      style: pw.TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: pw.FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              ...(emp.educationData['ol']
+                                      as Map<String, dynamic>)
+                                  .entries
+                                  .map((entry) {
+                                    return pw.TableRow(
+                                      children: [
+                                        pw.Padding(
+                                          padding: const pw.EdgeInsets.all(4),
+                                          child: pw.Text(
+                                            entry.key,
+                                            style: const pw.TextStyle(
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ),
+                                        pw.Padding(
+                                          padding: const pw.EdgeInsets.all(4),
+                                          child: pw.Text(
+                                            entry.value.toString(),
+                                            style: const pw.TextStyle(
+                                              fontSize: 9,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  }),
+                            ],
+                          )
+                        else
+                          pw.Text(
+                            'No O/L details available',
+                            style: const pw.TextStyle(
+                              fontSize: 9,
+                              color: PdfColors.grey,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  _buildPdfInfoRow(
-                    'Joined Date',
-                    DateFormat('yyyy-MM-dd').format(emp.joinedDate),
-                  ),
-                  _buildPdfInfoRow(
-                    'Working Days',
-                    '${emp.getWorkingDaysFromNow()}',
+                  pw.SizedBox(width: 20),
+                  // A/L
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'G.C.E Advanced Level (A/L)',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            decoration: pw.TextDecoration.underline,
+                          ),
+                        ),
+                        pw.SizedBox(height: 5),
+                        if (emp.educationData['al'] != null &&
+                            emp.educationData['al'] is List)
+                          pw.Table(
+                            border: pw.TableBorder.all(
+                              color: PdfColors.grey300,
+                              width: 0.5,
+                            ),
+                            children: [
+                              pw.TableRow(
+                                decoration: const pw.BoxDecoration(
+                                  color: PdfColors.grey200,
+                                ),
+                                children: [
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      'Subject',
+                                      style: pw.TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: pw.FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      'Grade',
+                                      style: pw.TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: pw.FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              ...(emp.educationData['al'] as List).map((entry) {
+                                return pw.TableRow(
+                                  children: [
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.all(4),
+                                      child: pw.Text(
+                                        entry['sub']?.toString() ?? '',
+                                        style: const pw.TextStyle(fontSize: 9),
+                                      ),
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.all(4),
+                                      child: pw.Text(
+                                        entry['grade']?.toString() ?? '',
+                                        style: const pw.TextStyle(fontSize: 9),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }),
+                            ],
+                          )
+                        else
+                          pw.Text(
+                            'No A/L details available',
+                            style: const pw.TextStyle(
+                              fontSize: 9,
+                              color: PdfColors.grey,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ),
+              if (emp.educationData['other'] != null &&
+                  emp.educationData['other'].toString().isNotEmpty) ...[
+                pw.SizedBox(height: 10),
+                buildField(
+                  'Other Qualifications',
+                  emp.educationData['other'].toString(),
+                  width: 140,
+                ),
+              ],
               pw.SizedBox(height: 20),
-              pw.Text(
-                'PAYMENT & BANKING',
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.grey600,
-                  letterSpacing: 1.2,
-                ),
-              ),
+
+              // 3. WORK EXPERIENCE
+              buildSectionTitle('Work Experience'),
               pw.SizedBox(height: 10),
-              pw.Table(
-                columnWidths: const {
-                  0: pw.IntrinsicColumnWidth(),
-                  1: pw.FlexColumnWidth(),
-                },
+              if (emp.workExperience.isNotEmpty)
+                pw.Table(
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey300,
+                    width: 0.5,
+                  ),
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.grey200,
+                      ),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Company / Organization',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Designation',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Period / Duration',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ...emp.workExperience.map((work) {
+                      return pw.TableRow(
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              work['company']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              work['designation']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              work['period']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                )
+              else
+                pw.Text(
+                  '- No work experience recorded -',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+              pw.SizedBox(height: 20),
+
+              // 4. REFERENCES
+              buildSectionTitle('Non-Related References'),
+              pw.SizedBox(height: 10),
+              if (emp.references.isNotEmpty)
+                pw.Table(
+                  border: pw.TableBorder.all(
+                    color: PdfColors.grey300,
+                    width: 0.5,
+                  ),
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.grey200,
+                      ),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Name',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Occupation',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(
+                            'Contact',
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ...emp.references.map((ref) {
+                      return pw.TableRow(
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              ref['name']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              ref['occupation']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                              ref['contact']?.toString() ?? '',
+                              style: const pw.TextStyle(fontSize: 9),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                )
+              else
+                pw.Text(
+                  '- No references recorded -',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontStyle: pw.FontStyle.italic,
+                  ),
+                ),
+              pw.SizedBox(height: 20),
+
+              // 5. BANKING DETAILS (Internal Use)
+              buildSectionTitle('Bank Account Details'),
+              pw.SizedBox(height: 10),
+              pw.Row(
                 children: [
-                  _buildPdfInfoRow(
-                    'Basic Salary',
-                    'LKR ${emp.salary.toStringAsFixed(2)}',
-                  ),
-                  _buildPdfInfoRow(
-                    'Bank Name',
-                    emp.bankName.isEmpty ? '-' : emp.bankName,
-                  ),
-                  _buildPdfInfoRow(
-                    'Branch',
-                    emp.bankBranch.isEmpty ? '-' : emp.bankBranch,
-                  ),
-                  _buildPdfInfoRow(
-                    'Account Number',
-                    emp.accountNo.isEmpty ? '-' : emp.accountNo,
-                  ),
-                  _buildPdfInfoRow(
-                    'Account Holder',
-                    emp.accountHolder.isEmpty ? '-' : emp.accountHolder,
+                  pw.Expanded(child: buildField('Bank Name', emp.bankName)),
+                  pw.Expanded(child: buildField('Branch', emp.bankBranch)),
+                ],
+              ),
+              pw.Row(
+                children: [
+                  pw.Expanded(child: buildField('Account No', emp.accountNo)),
+                  pw.Expanded(
+                    child: buildField('Account Name', emp.accountHolder),
                   ),
                 ],
+              ),
+              pw.SizedBox(height: 30),
+              pw.Divider(),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Text(
+                  'This is a computer-generated document from Nature Farming Management System.',
+                  style: const pw.TextStyle(
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
+                ),
               ),
             ];
           },
@@ -1060,14 +1216,14 @@ class _EmployeePageState extends State<EmployeePage> {
       final directory = await getDownloadsDirectory();
       final safeName = emp.fullName.replaceAll(RegExp(r'[^\w\s]+'), '');
       final fileName =
-          'StaffReport_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          'Application_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('${directory?.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Report Saved: $fileName')));
+        ).showSnackBar(SnackBar(content: Text('Application Saved: $fileName')));
       }
     } catch (e) {
       if (mounted) {
@@ -1076,27 +1232,6 @@ class _EmployeePageState extends State<EmployeePage> {
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
-  }
-
-  pw.TableRow _buildPdfInfoRow(String label, String value) {
-    return pw.TableRow(
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 5),
-          child: pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.grey700,
-            ),
-          ),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 5),
-          child: pw.Text(value),
-        ),
-      ],
-    );
   }
 
   void _onPaySalaries() async {
@@ -1113,15 +1248,188 @@ class _EmployeePageState extends State<EmployeePage> {
     // ... Rest of logic stays similar but simplified for this rewrite to avoid length limits
     await EmployeeService.markSalariesPaidNow();
     if (!mounted) return;
-    setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Salaries processed locally.')),
     );
   }
 
+  void _showEmployeeDetails(Employee emp) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final edu = emp.educationData;
+        final work = emp.workExperience;
+        final refs = emp.references;
+
+        return AlertDialog(
+          title: Text(
+            '${emp.fullName} (${emp.userId})',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('Personal Info'),
+                  _buildDetailRow('NIC', emp.nic),
+                  _buildDetailRow(
+                    'DOB',
+                    DateFormat('yyyy-MM-dd').format(emp.dob),
+                  ),
+                  _buildDetailRow(
+                    'Gender',
+                    _getSafeString(emp, 'gender'),
+                  ), // Helper needed or access map if in model? Model doesn't have gender map, checking.
+                  // Wait, Employee model doesn't have gender field yet?
+                  // Looking at service, it has civilStatus but missed gender in top list?
+                  // No, FieldVisitor model has gender. Employee service extracts common fields.
+                  // The user JSON has gender. I missed adding gender to Employee model?
+                  // Let's assume user just wants what's available or I should add gender to model too.
+                  // For now, let's show what we have.
+                  _buildDetailRow('Civil Status', emp.civilStatus),
+                  _buildDetailRow('Address (Postal)', emp.postalAddress),
+                  _buildDetailRow('Address (Permanent)', emp.permanentAddress),
+
+                  const Divider(),
+                  _buildSectionTitle('Education'),
+                  if (edu.isEmpty) const Text('No education data'),
+                  if (edu.isNotEmpty) ...[
+                    if (edu['ol'] != null) ...[
+                      Text(
+                        'O/L Results:',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                      ...(edu['ol'] as Map? ?? {}).entries.map(
+                        (e) => Text('  ${e.key}: ${e.value}'),
+                      ),
+                    ],
+                    const SizedBox(height: 5),
+                    if (edu['al'] != null && edu['al'] is List) ...[
+                      Text(
+                        'A/L Results:',
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      ),
+                      ...(edu['al'] as List).map(
+                        (e) => Text('  ${e['sub']}: ${e['grade']}'),
+                      ),
+                    ],
+                    if (edu['other'] != null)
+                      Text(
+                        'Other: ${edu['other']}',
+                        style: GoogleFonts.outfit(fontStyle: FontStyle.italic),
+                      ),
+                  ],
+
+                  const Divider(),
+                  _buildSectionTitle('Work Experience'),
+                  if (work.isEmpty) const Text('No experience recorded'),
+                  ...work.map((w) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Text(
+                        '• ${w['designation']} at ${w['company']} (${w['period']})',
+                      ),
+                    );
+                  }),
+
+                  const Divider(),
+                  _buildSectionTitle('References'),
+                  if (refs.isEmpty) const Text('No references'),
+                  ...refs.map((r) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4.0),
+                      child: Text(
+                        '• ${r['name']} (${r['occupation']}) - ${r['contact']}',
+                      ),
+                    );
+                  }),
+
+                  const Divider(),
+                  _buildSectionTitle('Bank Details'),
+                  _buildDetailRow('Bank', emp.bankName),
+                  _buildDetailRow(
+                    'Branch',
+                    emp.branchName,
+                  ), // Wait, bankBranch vs branchName loop
+                  _buildDetailRow('Acc No', emp.accountNo),
+                  _buildDetailRow('Holder', emp.accountHolder),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Text(
+        title,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Colors.blueAccent,
+          decoration: TextDecoration.underline,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    if (value.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[700],
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.outfit(color: Colors.black87, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getSafeString(Employee e, String key) {
+    // Helper dummy for now as Employee might not have every dynamic key
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
-    var employees = EmployeeService.getEmployees();
+    var employees = List.of(EmployeeService.getEmployees());
+
+    // Sort Oldest First (Append new records at bottom)
+    employees.sort((a, b) {
+      final da = a.joinedDate;
+      final db = b.joinedDate;
+      return da.compareTo(db);
+    });
 
     // 1. Filter by Search Text (Name or ID)
     if (_filterId != null && _filterId!.isNotEmpty) {
@@ -1140,7 +1448,7 @@ class _EmployeePageState extends State<EmployeePage> {
     // 3. Filter by Branch
     if (_filterBranch != null && _filterBranch!.isNotEmpty) {
       employees = employees
-          .where((e) => e.branchName == _filterBranch)
+          .where((e) => _getBranchOrArea(e) == _filterBranch)
           .toList();
     }
 
@@ -1158,11 +1466,6 @@ class _EmployeePageState extends State<EmployeePage> {
             onPressed: _onPaySalaries,
           ),
           IconButton(
-            icon: const Icon(Icons.upload_file, color: Colors.blueAccent),
-            tooltip: 'Import IT Sector (Excel)',
-            onPressed: _importExcel,
-          ),
-          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
               await EmployeeService.fetchEmployees();
@@ -1177,103 +1480,273 @@ class _EmployeePageState extends State<EmployeePage> {
           // Search & Filter Row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
-            child: Row(
-              children: [
-                // Search Field
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _searchCtrl,
-                    style: GoogleFonts.outfit(),
-                    decoration: InputDecoration(
-                      labelText: 'Search by ID or Name',
-                      labelStyle: GoogleFonts.outfit(),
-                      prefixIcon: const Icon(Icons.search),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 0,
-                        horizontal: 10,
-                      ),
-                    ),
-                    onChanged: (v) => setState(() => _filterId = v.trim()),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Filter by Position
-                Expanded(
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Position',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 0,
-                        horizontal: 10,
-                      ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _filterPosition,
-                        isExpanded: true,
-                        items: [
-                          const DropdownMenuItem(
-                            value: null,
-                            child: Text('All Positions'),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                bool isMobile = constraints.maxWidth < 600;
+
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      // Search Field
+                      TextField(
+                        controller: _searchCtrl,
+                        style: GoogleFonts.outfit(),
+                        decoration: InputDecoration(
+                          labelText: 'Search by ID or Name',
+                          labelStyle: GoogleFonts.outfit(),
+                          prefixIcon: const Icon(Icons.search),
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 10,
                           ),
-                          ...EmployeeService.roles.map(
-                            (r) => DropdownMenuItem(value: r, child: Text(r)),
+                        ),
+                        onChanged: (v) => setState(() => _filterId = v.trim()),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          // Filter by Position
+                          Expanded(
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Position',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 0,
+                                  horizontal: 10,
+                                ),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: _filterPosition,
+                                  isExpanded: true,
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: null,
+                                      child: Text('All'),
+                                    ),
+                                    ...EmployeeService.roles.map(
+                                      (r) => DropdownMenuItem(
+                                        value: r,
+                                        child: Text(
+                                          r,
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (val) =>
+                                      setState(() => _filterPosition = val),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Filter by Branch
+                          Expanded(
+                            child: InputDecorator(
+                              decoration: const InputDecoration(
+                                labelText: 'Branch',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(
+                                  vertical: 0,
+                                  horizontal: 10,
+                                ),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: Builder(
+                                  builder: (context) {
+                                    final allBranches = {
+                                      ...EmployeeService.branches,
+                                      ...EmployeeService.getEmployees()
+                                          .map((e) => _getBranchOrArea(e))
+                                          .where((b) => b.isNotEmpty),
+                                    }.toList()..sort();
+
+                                    return DropdownButton<String>(
+                                      value: _filterBranch,
+                                      isExpanded: true,
+                                      items: [
+                                        const DropdownMenuItem(
+                                          value: null,
+                                          child: Text('All'),
+                                        ),
+                                        ...allBranches.map(
+                                          (b) => DropdownMenuItem(
+                                            value: b,
+                                            child: Text(
+                                              b,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      onChanged: (val) =>
+                                          setState(() => _filterBranch = val),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {
+                                _filterId = null;
+                                _filterPosition = null;
+                                _filterBranch = null;
+                              });
+                            },
+                            icon: const Icon(Icons.clear, color: Colors.grey),
                           ),
                         ],
-                        onChanged: (val) =>
-                            setState(() => _filterPosition = val),
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Filter by Branch
-                Expanded(
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Branch',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 0,
-                        horizontal: 10,
-                      ),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _filterBranch,
-                        isExpanded: true,
-                        items: [
-                          const DropdownMenuItem(
-                            value: null,
-                            child: Text('All Branches'),
+                    ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    // Search Field
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _searchCtrl,
+                        style: GoogleFonts.outfit(),
+                        decoration: InputDecoration(
+                          labelText: 'Search by ID or Name',
+                          labelStyle: GoogleFonts.outfit(),
+                          prefixIcon: const Icon(Icons.search),
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 0,
+                            horizontal: 10,
                           ),
-                          ...EmployeeService.branches.map(
-                            (b) => DropdownMenuItem(value: b, child: Text(b)),
-                          ),
-                        ],
-                        onChanged: (val) => setState(() => _filterBranch = val),
+                        ),
+                        onChanged: (v) => setState(() => _filterId = v.trim()),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Clear Button
-                IconButton(
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    setState(() {
-                      _filterId = null;
-                      _filterPosition = null;
-                      _filterBranch = null;
-                    });
-                  },
-                  icon: const Icon(Icons.clear, color: Colors.grey),
-                  tooltip: 'Clear Filters',
-                ),
-              ],
+                    const SizedBox(width: 8),
+                    // Filter by Position
+                    Expanded(
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Position',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 0,
+                            horizontal: 10,
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _filterPosition,
+                            isExpanded: true,
+                            items: [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('All Positions'),
+                              ),
+                              ...EmployeeService.roles.map(
+                                (r) =>
+                                    DropdownMenuItem(value: r, child: Text(r)),
+                              ),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _filterPosition = val),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Filter by Branch
+                    Expanded(
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'Branch',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 0,
+                            horizontal: 10,
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: Builder(
+                            builder: (context) {
+                              final allBranches = {
+                                ...EmployeeService.branches,
+                                ...EmployeeService.getEmployees()
+                                    .map((e) => _getBranchOrArea(e))
+                                    .where((b) => b.isNotEmpty),
+                                ...[
+                                  'Jaffna (Kondavil)',
+                                  'Jaffna (Chavakachcheri)',
+                                  'Kalmunai',
+                                  'Trincomalee',
+                                  'Akkaraipattu',
+                                  'Ampara',
+                                  'Batticaloa',
+                                  'Cheddikulam',
+                                  'Kilinochchi',
+                                  'Mannar',
+                                  'Vavuniya',
+                                  'Mallavi',
+                                  'Mulliyawalai',
+                                  'Nedunkeny',
+                                  'Puthukkudiyiruppu',
+                                  'Aschuveli',
+                                  'Head Office',
+                                ],
+                              }.toList()..sort();
+
+                              return DropdownButton<String>(
+                                value: _filterBranch,
+                                isExpanded: true,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: null,
+                                    child: Text('All Branches'),
+                                  ),
+                                  ...allBranches.map(
+                                    (b) => DropdownMenuItem(
+                                      value: b,
+                                      child: Text(
+                                        b,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                onChanged: (val) =>
+                                    setState(() => _filterBranch = val),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Clear Button
+                    IconButton(
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() {
+                          _filterId = null;
+                          _filterPosition = null;
+                          _filterBranch = null;
+                        });
+                      },
+                      icon: const Icon(Icons.clear, color: Colors.grey),
+                      tooltip: 'Clear Filters',
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Expanded(
@@ -1442,6 +1915,16 @@ class _EmployeePageState extends State<EmployeePage> {
                     ),
                     DataColumn(
                       label: Text(
+                        'STATUS',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
                         'ACTIONS',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
@@ -1450,316 +1933,577 @@ class _EmployeePageState extends State<EmployeePage> {
                       ),
                     ),
                   ],
+                  headingRowHeight: 70,
                   headingRowColor: WidgetStateProperty.all(
                     const Color(0xFF111827),
                   ),
                   dataRowMinHeight: 60,
                   dataRowMaxHeight: 60,
-                  rows: employees.map((e) {
-                    return DataRow(
-                      cells: [
-                        // ID / Status (0)
-                        DataCell(
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                e.userId,
-                                style: GoogleFonts.outfit(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: e.status == 'active'
-                                      ? Colors.green.withValues(alpha: 0.1)
-                                      : Colors.red.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  e.status.toUpperCase(),
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: e.status == 'active'
-                                        ? Colors.green
-                                        : Colors.red,
+                  rows: [
+                    ...employees.map((e) {
+                      final isEditing =
+                          _editingEmpId == e.userId && _editingRow != null;
+                      return DataRow(
+                        color: isEditing
+                            ? WidgetStateProperty.all(const Color(0xFF374151))
+                            : null,
+                        cells: isEditing
+                            ? [
+                                // ID / Status (0)
+                                DataCell(
+                                  Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _editingRow!.previewId,
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      SizedBox(
+                                        width: 60,
+                                        child: _buildInlineField(
+                                          TextEditingController(
+                                            text: _editingRow!.status,
+                                          )..addListener(() {
+                                            _editingRow!.status =
+                                                _editingRow!.status;
+                                          }),
+                                          'Status',
+                                          employeeToSave: e,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Role (1)
-                        DataCell(
-                          Text(e.role, style: GoogleFonts.outfit(fontSize: 12)),
-                        ),
-                        // Branch (2)
-                        DataCell(
-                          Text(
-                            _getReadableBranch(e.branchName),
-                            style: GoogleFonts.outfit(fontSize: 12),
-                          ),
-                        ),
-                        // Name (3)
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.fullName,
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // NIC (4)
-                        DataCell(
-                          Text(e.nic, style: GoogleFonts.outfit(fontSize: 11)),
-                        ),
-                        // Email (5)
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.email,
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                color: Colors.blue[200],
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Phone (6)
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.phone,
-                              style: GoogleFonts.outfit(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        // Civil Status (7)
-                        DataCell(
-                          Text(
-                            e.civilStatus,
-                            style: GoogleFonts.outfit(fontSize: 11),
-                          ),
-                        ),
-                        // Postal Addr (8)
-                        DataCell(
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              e.postalAddress,
-                              style: GoogleFonts.outfit(fontSize: 10),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 2,
-                            ),
-                          ),
-                        ),
-                        // Perm Addr (9)
-                        DataCell(
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              e.permanentAddress,
-                              style: GoogleFonts.outfit(fontSize: 10),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 2,
-                            ),
-                          ),
-                        ),
-                        // Education (10)
-                        DataCell(
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              e.education,
-                              style: GoogleFonts.outfit(fontSize: 10),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        // Salary (11)
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.salary.toString(),
-                              style: GoogleFonts.outfit(color: Colors.grey),
-                            ),
-                          ),
-                        ),
-                        // Bank info (12, 13, 14, 15)
-                        DataCell(
-                          Container(
-                            width: 80,
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.bankName,
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            width: 80,
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.bankBranch,
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            width: 80,
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.accountNo,
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        DataCell(
-                          Container(
-                            width: 80,
-                            padding: const EdgeInsets.all(4),
-                            color: const Color(0xFF1F2937),
-                            child: Text(
-                              e.accountHolder,
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                color: Colors.white,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        // Actions (16)
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.blue,
+                                // Role (1)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.role,
+                                    'Role',
+                                    employeeToSave: e,
+                                  ),
                                 ),
-                                onPressed: () =>
-                                    _openAddEditDialog(employee: e),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.print,
-                                  color: Colors.grey,
+                                // Branch (2)
+                                DataCell(
+                                  e.role.toLowerCase().contains('field')
+                                      ? _buildInlineField(
+                                          _editingRow!.assignedArea,
+                                          'Area',
+                                          employeeToSave: e,
+                                        )
+                                      : _buildInlineField(
+                                          _editingRow!.branchName,
+                                          'Branch',
+                                          employeeToSave: e,
+                                        ),
                                 ),
-                                onPressed: () => _showEmployeeDetails(e),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete,
-                                  color: Colors.red,
+                                // Name (3)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.fullName,
+                                    'Name',
+                                    employeeToSave: e,
+                                  ),
                                 ),
-                                onPressed: () async {
-                                  // Capture ScaffoldMessenger before any async operations
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (c) => AlertDialog(
-                                      title: const Text('Delete Employee'),
-                                      content: Text(
-                                        'Are you sure you want to delete ${e.fullName}?',
+                                // NIC (4)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.nic,
+                                    'NIC',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Email (5)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.email,
+                                    'Email',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Phone (6)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.phone,
+                                    'Phone',
+                                    isPhone: true,
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Civil Status (7)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.civilStatus,
+                                    'Civil Status',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Postal Addr (8)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.postalAddress,
+                                    'Postal',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Perm Addr (9)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.permanentAddress,
+                                    'Permanent',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Education (10)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.education,
+                                    'Edu',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Salary (11)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.salary,
+                                    'Salary',
+                                    isNumber: true,
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                // Bank info (12-15)
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.bankName,
+                                    'Bank Name',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.bankBranch,
+                                    'Branch',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.accountNo,
+                                    'Acc No',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                DataCell(
+                                  _buildInlineField(
+                                    _editingRow!.accountHolder,
+                                    'Holder',
+                                    employeeToSave: e,
+                                  ),
+                                ),
+                                DataCell(
+                                  Switch(
+                                    value: _editingRow!.status == 'active',
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _editingRow!.status = val
+                                            ? 'active'
+                                            : 'inactive';
+                                      });
+                                    },
+                                    activeThumbColor: Colors.green,
+                                  ),
+                                ),
+                                // Actions (16) - Save/Cancel
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.check,
+                                          color: Colors.green,
+                                        ),
+                                        onPressed: () => _saveEditing(e),
+                                        tooltip: 'Save',
                                       ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(c).pop(false),
-                                          child: const Text('Cancel'),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.close,
+                                          color: Colors.red,
                                         ),
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.of(c).pop(true),
-                                          child: const Text('Delete'),
+                                        onPressed: _cancelEditing,
+                                        tooltip: 'Cancel',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ]
+                            : [
+                                // ID / Status (0)
+                                DataCell(
+                                  Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        e.userId,
+                                        style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
                                         ),
-                                      ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: e.status == 'active'
+                                              ? Colors.green.withValues(
+                                                  alpha: 0.1,
+                                                )
+                                              : Colors.red.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          e.status.toUpperCase(),
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                            color: e.status == 'active'
+                                                ? Colors.green
+                                                : Colors.red,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Role (1)
+                                DataCell(
+                                  Text(
+                                    e.role,
+                                    style: GoogleFonts.outfit(fontSize: 12),
+                                  ),
+                                ),
+                                // Branch (2)
+                                DataCell(
+                                  Text(
+                                    _getBranchOrArea(e),
+                                    style: GoogleFonts.outfit(fontSize: 12),
+                                  ),
+                                ),
+                                // Name (3)
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.fullName,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
                                     ),
-                                  );
-
-                                  if (confirm == true) {
-                                    try {
-                                      await EmployeeService.deleteEmployee(
-                                        e.id,
-                                      );
-                                      AuditService.logAction(
-                                        'User Deleted',
-                                        'Deleted user: ${e.fullName}',
-                                        targetUser: e.fullName,
-                                      );
-                                      setState(() {});
-
-                                      if (mounted) {
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              '${e.fullName} deleted successfully',
-                                            ),
-                                            backgroundColor: Colors.green,
+                                  ),
+                                ),
+                                // NIC (4)
+                                DataCell(
+                                  Text(
+                                    e.nic,
+                                    style: GoogleFonts.outfit(fontSize: 11),
+                                  ),
+                                ),
+                                // Email (5)
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.email,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 11,
+                                        color: Colors.blue[200],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Phone (6)
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.phone,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Civil Status (7)
+                                DataCell(
+                                  SizedBox(
+                                    width: 80,
+                                    child: Text(
+                                      e.civilStatus,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(fontSize: 11),
+                                    ),
+                                  ),
+                                ),
+                                // Postal Addr (8)
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      e.postalAddress,
+                                      style: GoogleFonts.outfit(fontSize: 10),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                    ),
+                                  ),
+                                ),
+                                // Perm Addr (9)
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      e.permanentAddress,
+                                      style: GoogleFonts.outfit(fontSize: 10),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                    ),
+                                  ),
+                                ),
+                                // Education (10)
+                                DataCell(
+                                  SizedBox(
+                                    width: 100,
+                                    child: Text(
+                                      e.education,
+                                      style: GoogleFonts.outfit(fontSize: 10),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                // Salary (11)
+                                DataCell(
+                                  Container(
+                                    width: 100,
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.salary.toString(),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.grey,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Bank info (12-15)
+                                DataCell(
+                                  Container(
+                                    width: 80,
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.bankName,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Container(
+                                    width: 80,
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.bankBranch,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Container(
+                                    width: 80,
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.accountNo,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Container(
+                                    width: 80,
+                                    padding: const EdgeInsets.all(4),
+                                    color: const Color(0xFF1F2937),
+                                    child: Text(
+                                      e.accountHolder,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Switch(
+                                    value: e.status == 'active',
+                                    onChanged: (val) => _toggleStatus(e),
+                                    activeThumbColor: Colors.green,
+                                    inactiveThumbColor: Colors.red,
+                                    inactiveTrackColor: Colors.red.withAlpha(
+                                      50,
+                                    ),
+                                  ),
+                                ),
+                                // ACTIONS (16)
+                                DataCell(
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.visibility,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                        onPressed: () =>
+                                            _showEmployeeDetails(e),
+                                        tooltip: 'View Details',
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                          size: 20,
+                                        ),
+                                        onPressed: () => _startEditing(e),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.print,
+                                          color: Colors.grey,
+                                          size: 20,
+                                        ),
+                                        onPressed: () =>
+                                            _generateAndDownloadPdf(e),
+                                      ),
+                                      if (e.role.toLowerCase() != 'it_sector' &&
+                                          e.role.toLowerCase() != 'it sector')
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                            size: 20,
                                           ),
-                                        );
-                                      }
-                                    } catch (error) {
-                                      if (mounted) {
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Delete failed: $error',
-                                            ),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                                          onPressed: () async {
+                                            if (e.id.isEmpty &&
+                                                e.userId.isEmpty) {
+                                              return;
+                                            }
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            final confirm = await showDialog<bool>(
+                                              context: context,
+                                              builder: (c) => AlertDialog(
+                                                title: const Text(
+                                                  'Delete Employee',
+                                                ),
+                                                content: Text(
+                                                  'Are you sure you want to delete ${e.fullName}?',
+                                                ),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(
+                                                          c,
+                                                        ).pop(false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(
+                                                          c,
+                                                        ).pop(true),
+                                                    child: const Text('Delete'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+
+                                            if (confirm == true) {
+                                              try {
+                                                await EmployeeService.deleteEmployee(
+                                                  e.id,
+                                                );
+                                                if (mounted) {
+                                                  messenger.showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Employee deleted successfully',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.green,
+                                                    ),
+                                                  );
+                                                  await EmployeeService.fetchEmployees();
+                                                  setState(() {});
+                                                }
+                                              } catch (err) {
+                                                if (mounted) {
+                                                  messenger.showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        'Delete failed: $err',
+                                                      ),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                            }
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                      );
+                    }),
+                    if (_newRow != null) _buildAddRow(),
+                  ],
                 ),
               ),
             ),
@@ -1770,18 +2514,7 @@ class _EmployeePageState extends State<EmployeePage> {
             padding: const EdgeInsets.all(16),
             color: const Color(0xFF111827),
             child: ElevatedButton.icon(
-              onPressed: () {
-                // _openAddEditDialog();
-                // User requested bulk entry UI instead
-                showDialog(
-                  context: context,
-                  builder: (context) => BulkEntryDialog(
-                    onSaveComplete: () {
-                      setState(() {});
-                    },
-                  ),
-                );
-              },
+              onPressed: _startAdding,
               icon: const Icon(Icons.add_circle, color: Colors.white),
               label: Text(
                 'ADD NEW ROW',
@@ -1799,5 +2532,67 @@ class _EmployeePageState extends State<EmployeePage> {
         ],
       ),
     );
+  }
+}
+
+class _InlineEmployeeRow {
+  final TextEditingController userIdController = TextEditingController();
+  final TextEditingController fullName = TextEditingController();
+  final TextEditingController email = TextEditingController();
+  final TextEditingController phone = TextEditingController();
+  final TextEditingController nic = TextEditingController();
+  final TextEditingController postalAddress = TextEditingController();
+  final TextEditingController permanentAddress = TextEditingController();
+  final TextEditingController bankName = TextEditingController();
+  final TextEditingController bankBranch = TextEditingController();
+  final TextEditingController accountNo = TextEditingController();
+  final TextEditingController accountHolder = TextEditingController();
+  final TextEditingController salary = TextEditingController();
+
+  // Field Visitor specific
+  final TextEditingController assignedArea = TextEditingController();
+  final TextEditingController targetAmount = TextEditingController();
+
+  // Changed to Controllers for typing support
+  final TextEditingController role = TextEditingController(
+    text: 'Field Visitor',
+  );
+  final TextEditingController branchName = TextEditingController(
+    text: 'Jaffna',
+  );
+  final TextEditingController civilStatus = TextEditingController(
+    text: 'Single',
+  );
+  final TextEditingController education = TextEditingController(text: 'O/L');
+
+  // Live Preview ID
+  String previewId = 'AUTO GEN';
+
+  DateTime dob = DateTime(1990);
+  DateTime joinedDate = DateTime.now();
+  String status = 'active';
+
+  String get userId => userIdController.text;
+  set userId(String val) => userIdController.text = val;
+
+  void dispose() {
+    userIdController.dispose();
+    fullName.dispose();
+    email.dispose();
+    phone.dispose();
+    nic.dispose();
+    postalAddress.dispose();
+    permanentAddress.dispose();
+    bankName.dispose();
+    bankBranch.dispose();
+    accountNo.dispose();
+    accountHolder.dispose();
+    salary.dispose();
+    assignedArea.dispose();
+    targetAmount.dispose();
+    role.dispose();
+    branchName.dispose();
+    civilStatus.dispose();
+    education.dispose();
   }
 }

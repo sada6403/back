@@ -22,7 +22,7 @@ class _LoginFormState extends State<LoginForm> {
           showDialog(
             context: context,
             builder: (context) {
-              final TextEditingController phoneController =
+              final TextEditingController userIdController =
                   TextEditingController();
               final TextEditingController otpController =
                   TextEditingController();
@@ -31,28 +31,30 @@ class _LoginFormState extends State<LoginForm> {
               final TextEditingController confirmPassController =
                   TextEditingController();
 
-              String? generatedOtp;
               bool otpSent = false;
               bool otpVerified = false;
               bool showNewPass = false;
               bool showConfirmPass = false;
+              String? resetToken; // Store token from verification
 
               return StatefulBuilder(
                 builder: (context, setState) {
-                  // Step 1: Enter phone and send OTP
+                  // Step 1: Enter User ID and send OTP (to Email)
                   if (!otpSent) {
                     return AlertDialog(
                       title: const Text('Reset Password'),
                       content: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Enter your phone number to receive OTP'),
+                          const Text(
+                            'Enter your User ID or Email to receive OTP',
+                          ),
                           const SizedBox(height: 16),
                           TextField(
-                            controller: phoneController,
-                            keyboardType: TextInputType.phone,
+                            controller: userIdController,
+                            keyboardType: TextInputType.text,
                             decoration: const InputDecoration(
-                              labelText: 'Phone No',
+                              labelText: 'User ID or Email',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -66,27 +68,46 @@ class _LoginFormState extends State<LoginForm> {
                           child: const Text('Cancel'),
                         ),
                         TextButton(
-                          onPressed: () {
-                            if (phoneController.text.isEmpty) {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
+                          onPressed: () async {
+                            if (userIdController.text.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Please enter phone number'),
+                                  content: Text('Please enter User ID'),
                                 ),
                               );
                               return;
                             }
 
-                            generatedOtp = AuthService.generateOtp();
-                            setState(() {
-                              otpSent = true;
-                            });
+                            // Call Real API
+                            final success =
+                                await AuthService.requestPasswordResetOtp(
+                                  userIdController.text.trim(),
+                                );
 
-                            ScaffoldMessenger.of(this.context).showSnackBar(
-                              SnackBar(
-                                content: Text('OTP sent: $generatedOtp'),
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
+                            if (!context.mounted) return;
+
+                            if (success) {
+                              setState(() {
+                                otpSent = true;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'OTP sent to your registered Email',
+                                  ),
+                                  duration: Duration(seconds: 3),
+                                ),
+                              );
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Failed to send OTP. Check User ID.',
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
                           },
                           child: const Text('Send OTP'),
                         ),
@@ -101,7 +122,7 @@ class _LoginFormState extends State<LoginForm> {
                       content: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Enter the OTP sent to your phone'),
+                          const Text('Enter the OTP sent to your Email'),
                           const SizedBox(height: 16),
                           TextField(
                             controller: otpController,
@@ -124,9 +145,9 @@ class _LoginFormState extends State<LoginForm> {
                           child: const Text('Back'),
                         ),
                         TextButton(
-                          onPressed: () {
+                          onPressed: () async {
                             if (otpController.text.isEmpty) {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Please enter OTP'),
                                 ),
@@ -134,18 +155,30 @@ class _LoginFormState extends State<LoginForm> {
                               return;
                             }
 
-                            if (AuthService.verifyOtp(otpController.text)) {
+                            final token =
+                                await AuthService.verifyPasswordResetOtp(
+                                  userIdController.text.trim(),
+                                  otpController.text.trim(),
+                                );
+
+                            if (!context.mounted) return;
+
+                            if (token != null) {
                               setState(() {
                                 otpVerified = true;
+                                resetToken = token;
                               });
-                              ScaffoldMessenger.of(this.context).showSnackBar(
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('OTP verified successfully'),
                                 ),
                               );
                             } else {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                const SnackBar(content: Text('Invalid OTP')),
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Invalid OTP'),
+                                  backgroundColor: Colors.red,
+                                ),
                               );
                             }
                           },
@@ -217,17 +250,18 @@ class _LoginFormState extends State<LoginForm> {
                               otpController.clear();
                               showNewPass = false;
                               showConfirmPass = false;
+                              resetToken = null;
                             });
                           },
                           child: const Text('Back'),
                         ),
                         TextButton(
-                          onPressed: () {
+                          onPressed: () async {
                             final newPass = newPassController.text;
                             final confirmPass = confirmPassController.text;
 
                             if (newPass.isEmpty || confirmPass.isEmpty) {
-                              ScaffoldMessenger.of(this.context).showSnackBar(
+                              ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Please fill all fields'),
                                 ),
@@ -236,18 +270,37 @@ class _LoginFormState extends State<LoginForm> {
                             }
 
                             if (newPass == confirmPass) {
-                              AuthService.resetPassword(newPass);
-                              AuthService.clearOtp();
+                              // Call Real Reset API
+                              final success =
+                                  await AuthService.completePasswordReset(
+                                    userIdController.text.trim(),
+                                    newPass,
+                                    resetToken!,
+                                  );
 
-                              Navigator.of(context).pop();
-                              ScaffoldMessenger.of(this.context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Password changed successfully. Your UserID and Credentials have been sent to your mobile.',
+                              if (!context.mounted) return;
+
+                              if (success) {
+                                if (!context.mounted) return;
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Password changed successfully! Please login with new password.',
+                                    ),
+                                    duration: Duration(seconds: 4),
                                   ),
-                                  duration: Duration(seconds: 4),
-                                ),
-                              );
+                                );
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Failed to reset password. Token might be expired.',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                             } else {
                               ScaffoldMessenger.of(this.context).showSnackBar(
                                 const SnackBar(

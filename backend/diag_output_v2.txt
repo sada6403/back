@@ -1,0 +1,23 @@
+Connecting to MongoDB...
+Connected successfully!
+
+Example Transaction Structure:
+- productName: Aloe Vera Plant (type: string)
+- quantity: 20 (type: number)
+- totalAmount: 640 (type: number)
+- date: Tue Feb 03 2026 09:43:31 GMT+0530 (India Standard Time) (type: object, isDate: true)
+- type: buy (type: string)
+
+Total Products: 3
+
+Product: "Aloe Vera Leaf"
+  - Transactions count: 1
+  - Manual Calc: Stock 312, Revenue -9984
+
+Product: "Aloe Vera Packets"
+  - Transactions count: 0
+  - Manual Calc: Stock 0, Revenue 0
+
+Product: "Aloe Vera Plant"
+  - Transactions count: 11
+  - Manual Calc: Stock 1003, Revenue -32096

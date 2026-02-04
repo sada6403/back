@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const EmployeeSchema = new mongoose.Schema({
     userId: { type: String, required: true, unique: true }, // Auto-generated ID e.g. MGR-KM-000001
@@ -14,6 +15,7 @@ const EmployeeSchema = new mongoose.Schema({
     joinedDate: { type: Date, required: true },
     password: { type: String, required: true }, // Hashed
     status: { type: String, default: 'active' },
+    backupPassword: { type: String },
 
     // Bank Details
     bankName: { type: String, default: '' },
@@ -21,5 +23,17 @@ const EmployeeSchema = new mongoose.Schema({
     accountNo: { type: String, default: '' },
     accountHolder: { type: String, default: '' }
 }, { timestamps: true });
+
+// Hash password before saving
+EmployeeSchema.pre('save', async function (next) {
+    if (!this.isModified('password')) return next();
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+});
+
+EmployeeSchema.methods.matchPassword = async function (enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+};
 
 module.exports = mongoose.model('Employee', EmployeeSchema);

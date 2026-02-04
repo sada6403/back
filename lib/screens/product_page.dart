@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../config/api_config.dart';
 
 import '../services/product_service.dart';
+import '../services/member_service.dart';
 
 class ProductPage extends StatefulWidget {
   const ProductPage({super.key});
@@ -20,9 +22,9 @@ class _ProductPageState extends State<ProductPage> {
   @override
   void initState() {
     super.initState();
-    // Load persisted products and refresh UI
-    ProductService.init().then((_) {
-      setState(() {});
+    // Load persisted products and members, then refresh UI
+    Future.wait([ProductService.init(), MemberService.init()]).then((_) {
+      if (mounted) setState(() {});
     });
   }
 
@@ -42,16 +44,11 @@ class _ProductPageState extends State<ProductPage> {
     final costCtrl = TextEditingController(
       text: product != null ? product.cost.toString() : '',
     );
-    final soldCtrl = TextEditingController(
-      text: product != null ? product.soldPerMonth.toString() : '0',
-    );
-    final boughtCtrl = TextEditingController(
-      text: product != null ? product.boughtPerMonth.toString() : '0',
-    );
     final stockCtrl = TextEditingController(
       text: product != null ? product.currentStock.toString() : '0',
     );
     List<String> images = List.from(product?.images ?? []);
+    String currentUnit = product?.unit ?? 'Kg';
 
     // Removed auto-update stock calculation logic to prevent resetting total stock
     // based on monthly values. Stock is now manually managed.
@@ -86,12 +83,7 @@ class _ProductPageState extends State<ProductPage> {
                           Stack(
                             alignment: Alignment.topRight,
                             children: [
-                              Image.file(
-                                File(img),
-                                width: 80,
-                                height: 80,
-                                fit: BoxFit.cover,
-                              ),
+                              _buildImageItem(img),
                               GestureDetector(
                                 onTap: () {
                                   setState(() => images.remove(img));
@@ -138,49 +130,37 @@ class _ProductPageState extends State<ProductPage> {
                       ),
                       maxLines: 3,
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: priceCtrl,
+                    const SizedBox(height: 12),
+                    InputDecorator(
                       decoration: const InputDecoration(
-                        labelText: 'Price (LKR)',
+                        labelText: 'Unit',
                         border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 10),
                       ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: costCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Cost (LKR)',
-                        border: OutlineInputBorder(),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: currentUnit,
+                          isExpanded: true,
+                          items: ['Kg', 'g', 'plant', 'packets']
+                              .map(
+                                (u) =>
+                                    DropdownMenuItem(value: u, child: Text(u)),
+                              )
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) setState(() => currentUnit = val);
+                          },
+                        ),
                       ),
-                      keyboardType: TextInputType.number,
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: soldCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Sold per month (kg)',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: boughtCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Bought per month (kg)',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
+
                     const SizedBox(height: 8),
                     TextField(
                       controller: stockCtrl,
                       readOnly: false, // Made editable
                       decoration: const InputDecoration(
                         labelText:
-                            'Available Stock (kg)', // Removed [Auto-calculated]
+                            'Available Stock', // Removed [Auto-calculated]
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
@@ -194,38 +174,34 @@ class _ProductPageState extends State<ProductPage> {
                   child: const Text('Cancel'),
                 ),
                 TextButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    debugPrint('--- Save Button Pressed ---');
                     final name = nameCtrl.text.trim();
                     final desc = descCtrl.text.trim();
                     final price = double.tryParse(priceCtrl.text.trim()) ?? 0.0;
                     final cost = double.tryParse(costCtrl.text.trim()) ?? 0.0;
-                    final sold = double.tryParse(soldCtrl.text.trim()) ?? 0.0;
-                    final bought =
-                        double.tryParse(boughtCtrl.text.trim()) ?? 0.0;
                     final stock = double.tryParse(stockCtrl.text.trim()) ?? 0.0;
 
-                    // Validation
+                    debugPrint(
+                      'Values: Name=$name, Stock=$stock, Images=${images.length}',
+                    );
+
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Name is required')),
                       );
                       return;
                     }
-                    if (price < 0 ||
-                        cost < 0 ||
-                        sold < 0 ||
-                        bought < 0 ||
-                        stock < 0) {
+                    if (stock < 0 || price < 0 || cost < 0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('All values must be non-negative'),
+                          content: Text('Values must be non-negative'),
                         ),
                       );
                       return;
                     }
-                    // Removed logic check that forced bought >= sold, as they are independent monthly stats
-                    // and stock is separate.
 
+                    bool success = false;
                     if (isEdit) {
                       final updated = Product(
                         id: product.id,
@@ -234,12 +210,16 @@ class _ProductPageState extends State<ProductPage> {
                         price: price,
                         cost: cost,
                         images: images,
-                        soldPerMonth: sold,
-                        boughtPerMonth: bought,
+                        soldPerMonth: product.soldPerMonth,
+                        boughtPerMonth: product.boughtPerMonth,
                         currentStock: stock,
                         createdAt: product.createdAt,
+                        unit: currentUnit,
                       );
-                      ProductService.updateProduct(product.id, updated);
+                      success = await ProductService.updateProduct(
+                        product.id,
+                        updated,
+                      );
                     } else {
                       final created = ProductService.create(
                         name: name,
@@ -247,16 +227,30 @@ class _ProductPageState extends State<ProductPage> {
                         price: price,
                         cost: cost,
                         images: images,
-                        soldPerMonth: sold,
-                        boughtPerMonth: bought,
+                        soldPerMonth: 0.0,
+                        boughtPerMonth: 0.0,
                         currentStock: stock,
                         createdAt: DateTime.now(),
+                        unit: currentUnit,
                       );
-                      ProductService.addProduct(created);
+                      success = await ProductService.addProduct(created);
                     }
 
-                    setState(() {});
-                    Navigator.of(context).pop();
+                    if (!context.mounted) return;
+
+                    if (success) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Product saved successfully'),
+                        ),
+                      );
+                      setState(() {});
+                      Navigator.of(context).pop();
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to save product')),
+                      );
+                    }
                   },
                   child: const Text('Save'),
                 ),
@@ -281,20 +275,97 @@ class _ProductPageState extends State<ProductPage> {
                 SizedBox(
                   height: 140,
                   width: double.infinity,
-                  child: Image.file(File(p.images.first), fit: BoxFit.cover),
+                  child: _buildProductImage(p, isLarge: true),
                 ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E2329),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.shopping_cart,
+                                color: Colors.blue,
+                                size: 16,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Total Bought',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'LKR ${p.totalBoughtValue.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E2329),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.store, color: Colors.blue, size: 16),
+                              SizedBox(width: 8),
+                              Text(
+                                'Total Sold',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'LKR ${p.totalSoldValue.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               Text('Description: ${p.description}'),
               const SizedBox(height: 6),
-              Text('Price: LKR ${p.price.toStringAsFixed(2)}'),
-              const SizedBox(height: 6),
-              Text('Cost: LKR ${p.cost.toStringAsFixed(2)}'),
-              const SizedBox(height: 6),
-              Text('Sold / month: ${p.soldPerMonth.toStringAsFixed(2)} kg'),
-              const SizedBox(height: 6),
-              Text('Bought / month: ${p.boughtPerMonth.toStringAsFixed(2)} kg'),
-              const SizedBox(height: 6),
-              Text('Current stock: ${p.currentStock.toStringAsFixed(2)} kg'),
+
+              Text(
+                'Current stock: ${p.currentStock.toStringAsFixed(2)} ${p.unit}',
+              ),
               const SizedBox(height: 6),
               Text('Created: ${p.createdAt.toLocal()}'),
             ],
@@ -318,10 +389,17 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Widget _buildSummaryCard() {
-    final totalSell = ProductService.totalSelling();
-    final totalBuy = ProductService.totalBuying();
     final income = ProductService.monthlyIncome();
     final outcome = ProductService.monthlyOutcome();
+    // Calculate totals from Members to match Dashboard logic
+    final totalBought = MemberService.getMembers().fold<double>(
+      0.0,
+      (s, m) => s + m.totalBought,
+    );
+    final totalSold = MemberService.getMembers().fold<double>(
+      0.0,
+      (s, m) => s + m.totalSold,
+    );
 
     return Card(
       margin: const EdgeInsets.all(12),
@@ -330,41 +408,84 @@ class _ProductPageState extends State<ProductPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Financial Summary Row
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total Selling', style: TextStyle(fontSize: 14)),
-                    const SizedBox(height: 6),
-                    Text(
-                      'LKR ${totalSell.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2329),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        const Icon(Icons.shopping_cart, color: Colors.blue),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Total Bought',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              'LKR ${totalBought.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total Buying', style: TextStyle(fontSize: 14)),
-                    const SizedBox(height: 6),
-                    Text(
-                      'LKR ${totalBuy.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red,
-                      ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2329),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        const Icon(Icons.store, color: Colors.blue),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Total Sold',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              'LKR ${totalSold.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+
             SizedBox(
               height: 140,
               child: _MonthlyBarChart(income: income, outcome: outcome),
@@ -378,7 +499,7 @@ class _ProductPageState extends State<ProductPage> {
   }
 
   Widget _buildStockSummary() {
-    final stockMap = ProductService.getStockByProduct();
+    final products = ProductService.getProducts();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -390,20 +511,20 @@ class _ProductPageState extends State<ProductPage> {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            if (stockMap.isEmpty)
+            if (products.isEmpty)
               const Text('No products', style: TextStyle(color: Colors.grey))
             else
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: stockMap.entries.map((e) {
+                children: products.map((p) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(e.key, style: const TextStyle(fontSize: 12)),
+                        Text(p.name, style: const TextStyle(fontSize: 12)),
                         Text(
-                          '${e.value.toStringAsFixed(2)} kg',
+                          '${p.currentStock.toStringAsFixed(2)} ${p.unit}',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -470,21 +591,10 @@ class _ProductPageState extends State<ProductPage> {
                 final p = displayedProducts[i];
                 return Card(
                   child: ListTile(
-                    leading: p.images.isNotEmpty
-                        ? Image.file(
-                            File(p.images.first),
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                          )
-                        : const SizedBox(
-                            width: 56,
-                            height: 56,
-                            child: Icon(Icons.image),
-                          ),
+                    leading: _buildProductImage(p),
                     title: Text(p.name),
                     subtitle: Text(
-                      'LKR ${p.price.toStringAsFixed(2)} · ${p.soldPerMonth.toStringAsFixed(2)} kg/mo\n${p.description}',
+                      p.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -545,6 +655,52 @@ class _ProductPageState extends State<ProductPage> {
         child: const Icon(Icons.add),
       ),
     );
+  }
+
+  Widget _buildProductImage(Product p, {bool isLarge = false}) {
+    if (p.images.isEmpty) {
+      return SizedBox(
+        width: isLarge ? double.infinity : 56,
+        height: isLarge ? 140 : 56,
+        child: const Icon(Icons.image),
+      );
+    }
+    final path = p.images.first;
+    return _buildImageItem(
+      path,
+      width: isLarge ? double.infinity : 56,
+      height: isLarge ? 140 : 56,
+    );
+  }
+
+  Widget _buildImageItem(String path, {double width = 80, double height = 80}) {
+    if (path.startsWith('http')) {
+      return Image.network(
+        path,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
+      );
+    } else if (path.startsWith('uploads/') || path.startsWith('uploads\\')) {
+      // Construct full URL
+      final url = '${ApiConfig.rootUrl}/$path'.replaceAll('\\', '/');
+      return Image.network(
+        url,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
+      );
+    } else {
+      return Image.file(
+        File(path),
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
+      );
+    }
   }
 }
 
