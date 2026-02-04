@@ -469,4 +469,75 @@ router.post('/reset-password/:employeeId', async (req, res) => {
     }
 });
 
+// PATCH toggle employee status
+router.patch('/:id/status', async (req, res) => {
+    try {
+        const models = [ITSector, BranchManager, FieldVisitor, Manager, Employee];
+        let employee = null;
+        let usedModel = null;
+
+        // Find the employee across all collections
+        for (const model of models) {
+            employee = await model.findOne({ userId: req.params.id });
+            if (employee) {
+                usedModel = model;
+                break;
+            }
+        }
+
+        // Fallback to _id search
+        if (!employee) {
+            for (const model of models) {
+                if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+                    employee = await model.findById(req.params.id);
+                    if (employee) {
+                        usedModel = model;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee not found' });
+        }
+
+        const newStatus = employee.status === 'active' ? 'inactive' : 'active';
+
+        // Update ALL collections for this userId
+        const updatePromises = models.map(async (model) => {
+            const matches = await model.find({ userId: employee.userId });
+            for (const doc of matches) {
+                const update = { $set: { status: newStatus } };
+
+                if (newStatus === 'inactive') {
+                    // Only backup if it's a real password (not already deactivated)
+                    if (doc.password && !doc.password.startsWith('DEACTIVATED_')) {
+                        update.$set.backupPassword = doc.password;
+                        update.$set.password = `DEACTIVATED_${doc.userId}`;
+                    }
+                } else {
+                    // Restore if backup exists
+                    if (doc.backupPassword) {
+                        update.$set.password = doc.backupPassword;
+                        update.$unset = { backupPassword: "" };
+                    }
+                }
+
+                await model.updateOne({ _id: doc._id }, update);
+            }
+        });
+
+        await Promise.all(updatePromises);
+
+        res.json({
+            success: true,
+            status: newStatus,
+            userId: employee.userId
+        });
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
 module.exports = router;
