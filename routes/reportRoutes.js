@@ -1,6 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { getManagerDashboard, getFieldVisitorDashboard, getYearlyAnalysis, getDashboardStats, getMemberTransactions } = require('../controllers/reportController');
+const {
+	getManagerDashboard,
+	getFieldVisitorDashboard,
+	getYearlyAnalysis,
+	getDashboardStats,
+	getMemberTransactions,
+	getDailyBranchComparison
+} = require('../controllers/reportController');
+const { getVisualAnalytics } = require('../controllers/visualAnalyticsController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 // Manager view: branch summary + FV contributions
@@ -25,5 +33,7 @@ router.get('/dashboard', protect, (req, res, next) => {
 
 router.get('/member-transactions', protect, getMemberTransactions);
 router.get('/yearly', protect, getYearlyAnalysis);
+router.get('/daily-branch-comparison', protect, getDailyBranchComparison);
+router.get('/visual-analytics', protect, getVisualAnalytics);
 
 module.exports = router;
