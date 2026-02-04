@@ -192,7 +192,6 @@ class _DailyBranchComparisonScreenState
 
     int index = 0;
     for (final entry in _comparisonData.entries) {
-      final branchId = entry.key;
       final totals = entry.value;
       final value = (totals[type] as num).toDouble();
       if (value > 0) {
@@ -201,7 +200,7 @@ class _DailyBranchComparisonScreenState
           PieChartSectionData(
             color: _colors[index % _colors.length],
             value: value,
-            title: '$branchId\n${percentage.toStringAsFixed(1)}%',
+            title: '${percentage.toStringAsFixed(1)}%',
             radius: 100,
             titleStyle: const TextStyle(
               fontSize: 10,

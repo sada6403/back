@@ -200,7 +200,7 @@ class _VisualComparisonScreenState extends State<VisualComparisonScreen> {
           PieChartSectionData(
             color: _colors[colorIndex % _colors.length],
             value: amount,
-            title: '$branch\n${percentage.toStringAsFixed(1)}%',
+            title: '${percentage.toStringAsFixed(1)}%',
             radius: 100,
             titleStyle: const TextStyle(
               fontSize: 10,
@@ -270,7 +270,7 @@ class _VisualComparisonScreenState extends State<VisualComparisonScreen> {
           PieChartSectionData(
             color: _colors[colorIndex % _colors.length],
             value: productTotal,
-            title: '$product\n${percentage.toStringAsFixed(1)}%',
+            title: '${percentage.toStringAsFixed(1)}%',
             radius: 100,
             titleStyle: const TextStyle(
               fontSize: 10,
