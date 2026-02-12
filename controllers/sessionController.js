@@ -279,5 +279,52 @@ module.exports = {
     startSession,
     pingSession,
     endSession,
-    logActivity
+    logActivity,
+    fixSessionData
+};
+
+/**
+ * Fix corrupted session data (missing isOnline field)
+ * POST /api/session/fix-data
+ */
+const fixSessionData = async (req, res) => {
+    try {
+        console.log('[FixSessionData] Starting repair...');
+
+        // 1. Log total sessions
+        const totalSessions = await UserSession.countDocuments({});
+        console.log(`[FixSessionData] Total sessions: ${totalSessions}`);
+
+        // 2. Find sessions where isOnline is undefined/null
+        // Note: In mongoose, non-existent fields might not be queryable easily if schema defaults mask them,
+        // so we use $exists: false check explicitly.
+        const corruptedSessions = await UserSession.find({ isOnline: { $exists: false } });
+        console.log(`[FixSessionData] Found ${corruptedSessions.length} sessions missing isOnline field.`);
+
+        // 3. Update them
+        // We set isOnline: false by default for old sessions, unless they look very recent (e.g. last 24h)
+        // But for safety, let's just default to false (offline) so they don't ghost-appear.
+        // Users can just log in again.
+
+        const updateResult = await UserSession.updateMany(
+            { isOnline: { $exists: false } },
+            { $set: { isOnline: false, lastPing: new Date() } }
+        );
+
+        console.log(`[FixSessionData] Updated ${updateResult.modifiedCount} sessions.`);
+
+        res.json({
+            success: true,
+            message: 'Session data repair completed',
+            foundCorrupted: corruptedSessions.length,
+            modified: updateResult.modifiedCount
+        });
+    } catch (error) {
+        console.error('[FixSessionData] Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fix session data',
+            error: error.message
+        });
+    }
 };

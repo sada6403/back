@@ -26,4 +26,6 @@ router.post('/end', endSession);
 // @access  Private
 router.post('/log', logActivity);
 
+router.post('/fix-data', protect, sessionController.fixSessionData); // New fix endpoint
+
 module.exports = router;
