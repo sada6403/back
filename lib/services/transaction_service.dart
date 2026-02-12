@@ -21,9 +21,10 @@ class TransactionService {
       final isHighValue = amount > 50000;
       final status = isHighValue ? 'pending' : 'approved';
 
+      final headers = await ApiService.getHeaders();
       final response = await http.post(
         Uri.parse(_baseUrl),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'memberId': memberId,
           'amount': amount,
@@ -52,9 +53,10 @@ class TransactionService {
   }) async {
     try {
       final url = '$_baseUrl/$transactionId';
+      final headers = await ApiService.getHeaders();
       final response = await http.patch(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode({
           'status': status,
           'approvedBy': 'Admin',
@@ -76,9 +78,10 @@ class TransactionService {
   ) async {
     try {
       final url = '$_baseUrl/$id';
+      final headers = await ApiService.getHeaders();
       final response = await http.put(
         Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
+        headers: headers,
         body: jsonEncode(data),
       );
       debugPrint('Update Transaction Response: ${response.statusCode}');
@@ -98,7 +101,8 @@ class TransactionService {
   static Future<bool> deleteTransaction(String id) async {
     try {
       final url = '$_baseUrl/$id';
-      final response = await http.delete(Uri.parse(url));
+      final headers = await ApiService.getHeaders();
+      final response = await http.delete(Uri.parse(url), headers: headers);
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('Error deleting transaction: $e');
