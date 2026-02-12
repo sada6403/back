@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/member_service.dart';
 import '../services/audit_service.dart';
 import '../services/transaction_service.dart';
+import '../services/auth_service.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:printing/printing.dart';
@@ -184,6 +185,7 @@ class _MembersPageState extends State<MembersPage> {
       final fullMember = newMember.copyWith(
         nic: row.nic.text,
         address: row.address.text,
+        memberCode: row.memberCode.text,
         fieldVisitorId: row.fieldVisitorId.text.isNotEmpty
             ? row.fieldVisitorId.text
             : null,
@@ -995,11 +997,12 @@ class _MembersPageState extends State<MembersPage> {
         iconTheme: const IconThemeData(color: Colors.white),
         titleTextStyle: const TextStyle(color: Colors.white, fontSize: 20),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.file_upload),
-            tooltip: 'Import Excel',
-            onPressed: _importExcel,
-          ),
+          if (AuthService.role != 'analyzer')
+            IconButton(
+              icon: const Icon(Icons.file_upload),
+              tooltip: 'Import Excel',
+              onPressed: _importExcel,
+            ),
         ],
       ),
       body: Column(
@@ -1526,25 +1529,28 @@ class _MembersPageState extends State<MembersPage> {
                                           () => _showMemberDetails(m),
                                           'View',
                                         ),
-                                        _buildActionIcon(
-                                          Icons.edit,
-                                          Colors.blue,
-                                          () => _startEditing(m),
-                                          'Edit',
-                                        ),
+                                        if (AuthService.role != 'analyzer')
+                                          _buildActionIcon(
+                                            Icons.edit,
+                                            Colors.blue,
+                                            () => _startEditing(m),
+                                            'Edit',
+                                          ),
                                         _buildActionIcon(
                                           Icons.print,
                                           Colors.grey,
                                           () => _printMemberReport(m),
                                           'Print',
                                         ),
-                                        _buildActionIcon(
-                                          Icons.delete,
-                                          Colors.red,
-                                          () =>
-                                              _deleteMemberWithConfirmation(m),
-                                          'Delete',
-                                        ),
+                                        if (AuthService.role != 'analyzer')
+                                          _buildActionIcon(
+                                            Icons.delete,
+                                            Colors.red,
+                                            () => _deleteMemberWithConfirmation(
+                                              m,
+                                            ),
+                                            'Delete',
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -1637,32 +1643,33 @@ class _MembersPageState extends State<MembersPage> {
             ),
           ),
           // Add Button Bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF111827),
-            child: ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _newRows.add(_InlineMemberRow());
-                });
-                // Scroll to end logic if possible, or user just sees it
-              },
-              icon: const Icon(Icons.add_circle, color: Colors.white),
-              label: Text(
-                'ADD NEW MEMBER (INLINE)',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+          if (AuthService.role != 'analyzer')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: const Color(0xFF111827),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _newRows.add(_InlineMemberRow());
+                  });
+                  // Scroll to end logic if possible, or user just sees it
+                },
+                icon: const Icon(Icons.add_circle, color: Colors.white),
+                label: Text(
+                  'ADD NEW MEMBER (INLINE)',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1F2937),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: Colors.white, width: 0.5),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F2937),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                side: const BorderSide(color: Colors.white, width: 0.5),
-              ),
             ),
-          ),
         ],
       ),
     );

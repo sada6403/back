@@ -1,0 +1,20 @@
+﻿Connected to MongoDB
+
+--- Searching FieldVisitor Collection (KA/KC Prefix) ---
+FV-KA-001 | Name: Dalindan Saliny | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-002 | Name: Perampalarasan Rathika | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-003 | Name: Sasikaran kalaivany | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-004 | Name: Sunmugaraja Sasikala | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-005 | Name: Yokesvaran Abiramy | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-006 | Name: Vadivel Sivasri | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-007 | Name: Raveenthirakumar Tharsiny | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KC-008 | Name: Thevalingam Sakila | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-009 | Name: Jeevananthan Thabojini | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-010 | Name: Sivatharsan Nishanthini | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-011 | Name: Elangeswaran Pakeerathy | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+
+--- Searching for specific names in FieldVisitor Collection ---
+
+--- Searching for specific names in User Collection ---
+
+--- Searching Members for denormalized Field Visitor data ---

@@ -7,6 +7,7 @@ import 'transaction_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
+import 'session_service.dart';
 
 // Export Member class for external usage if needed, though direct import is better
 export '../models/member.dart';
@@ -41,6 +42,11 @@ class MemberService {
           for (final m in list) {
             _members.add(Member.fromJson(m as Map<String, dynamic>));
           }
+          // Log Data View
+          SessionService.logActivity(
+            'DATA_VIEW',
+            details: 'Fetched Member List',
+          );
         }
       } else {
         debugPrint('Failed to load members: ${response.body}');

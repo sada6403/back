@@ -1,0 +1,33 @@
+{
+  "scanTime": "2026-02-10T09:38:42.737Z",
+  "missingIds": [
+    "FV-KA-001",
+    "FV-KA-002",
+    "FV-KA-003",
+    "FV-KA-004",
+    "FV-KA-005",
+    "FV-KA-006",
+    "FV-KA-007",
+    "FV-KA-008",
+    "FV-KA-009",
+    "FV-KA-010",
+    "FV-KA-011"
+  ],
+  "foundInFieldVisitors": [],
+  "foundInUsers": [],
+  "foundInTransactions": [],
+  "potentialRestorabled": [],
+  "targetIds": [
+    "FV-KA-001",
+    "FV-KA-002",
+    "FV-KA-003",
+    "FV-KA-004",
+    "FV-KA-005",
+    "FV-KA-006",
+    "FV-KA-007",
+    "FV-KA-008",
+    "FV-KA-009",
+    "FV-KA-010",
+    "FV-KA-011"
+  ]
+}

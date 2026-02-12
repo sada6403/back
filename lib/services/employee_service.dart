@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
+import 'session_service.dart';
 
 class Employee {
   // Use userId for the functional ID (e.g. MGR-KM-000001)
@@ -197,11 +198,10 @@ class Employee {
     // FieldVisitors: 'name', 'userId', 'phone', 'role'='field_visitor', 'bankDetails'
 
     String r = (m['role'] as String? ?? type).trim();
-    if (r == 'manager') r = 'Branch Manager';
-    if (r == 'field_visitor') r = 'Field Visitor';
-    if (r == 'it_sector') r = 'IT Sector';
-    if (r == 'branch_manager') r = 'Manager';
-    if (r == 'it_sector') r = 'IT Sector';
+    if (r == 'manager' || r == 'branch_manager') r = 'Branch Manager';
+    if (r == 'field_visitor' || r == 'field') r = 'Field Visitor';
+    if (r == 'it_sector' || r == 'it' || r == 'admin') r = 'IT Sector';
+    if (r == 'analyzer') r = 'Analyzer';
 
     String name = m['fullName'] as String? ?? m['name'] as String? ?? '';
     String uId = m['userId'] as String? ?? m['code'] as String? ?? '';
@@ -370,7 +370,22 @@ class EmployeeService {
               );
             }
           }
+          // Analyzers
+          if (data['analyzers'] != null) {
+            final azs = data['analyzers'] as List;
+            debugPrint('Found ${azs.length} Analyzers in API');
+            for (final az in azs) {
+              _employees.add(
+                Employee.fromJson(az as Map<String, dynamic>, type: 'Analyzer'),
+              );
+            }
+          }
           debugPrint('Total Parsed Employees: ${_employees.length}');
+          // Log Data View
+          SessionService.logActivity(
+            'DATA_VIEW',
+            details: 'Fetched Employee List',
+          );
         }
       } else {
         debugPrint('Fetch Employees Failed: ${response.body}');
@@ -791,6 +806,7 @@ class EmployeeService {
     'Branch Manager',
     'Field Visitor',
     'IT Sector',
+    'Analyzer',
   ];
 
   static const List<String> branches = [
@@ -810,6 +826,8 @@ class EmployeeService {
     'Nedunkeny',
     'Puthukkudiyiruppu',
     'Aschuveli',
+    'Kandawalai',
+    'Karachchi',
   ];
 }
 

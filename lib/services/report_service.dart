@@ -10,8 +10,104 @@ import 'package:intl/intl.dart';
 import 'dart:ui' as ui;
 import '../models/transaction.dart';
 import '../config/api_config.dart';
+import 'session_service.dart';
 
 class ReportService {
+  static Future<List<dynamic>> getBranchStock({String? branchId}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      String url = '${ApiConfig.baseUrl}/reports/branch-stock';
+      if (branchId != null && branchId != 'All') url += '?branchId=$branchId';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['data'] as List<dynamic>;
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching branch stock: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> getBranchFinancials({
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      String url = '${ApiConfig.baseUrl}/reports/branch-financials';
+
+      List<String> params = [];
+      if (startDate != null) {
+        params.add('startDate=${startDate.toIso8601String()}');
+      }
+      if (endDate != null) params.add('endDate=${endDate.toIso8601String()}');
+
+      if (params.isNotEmpty) url += '?${params.join('&')}';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['data'] as Map<String, dynamic>;
+      }
+      return {};
+    } catch (e) {
+      debugPrint('Error fetching branch financials: $e');
+      return {};
+    }
+  }
+
+  static Future<List<dynamic>> getFVPerformance({
+    required String branchId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+      String url =
+          '${ApiConfig.baseUrl}/reports/fv-performance?branchId=$branchId';
+
+      if (startDate != null) url += '&startDate=${startDate.toIso8601String()}';
+      if (endDate != null) url += '&endDate=${endDate.toIso8601String()}';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['data'] as List<dynamic>;
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching FV performance: $e');
+      return [];
+    }
+  }
+
   static Future<Map<String, dynamic>> getVisualAnalyticsData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -28,6 +124,10 @@ class ReportService {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body['success'] == true) {
+          SessionService.logActivity(
+            'REPORT_VIEW',
+            details: 'Visual Analytics',
+          );
           return body['data'] as Map<String, dynamic>;
         }
       }
@@ -130,6 +230,12 @@ class ReportService {
       bytes: await pdf.save(),
       filename: 'visual_analytics_${DateFormat('yyyyMMdd').format(now)}.pdf',
     );
+
+    // Log Report Download
+    SessionService.logActivity(
+      'REPORT_DOWNLOAD',
+      details: 'Visual Analytics PDF',
+    );
   }
 
   static Future<Map<String, dynamic>> getDailyBranchComparisonData() async {
@@ -148,6 +254,10 @@ class ReportService {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body['success'] == true) {
+          SessionService.logActivity(
+            'REPORT_VIEW',
+            details: 'Daily Branch Comparison',
+          );
           return body['data'] as Map<String, dynamic>;
         }
       }
@@ -210,6 +320,12 @@ class ReportService {
     await Printing.sharePdf(
       bytes: await pdf.save(),
       filename: 'comparison_${DateFormat('yyyyMMdd').format(now)}.pdf',
+    );
+
+    // Log Report Download
+    SessionService.logActivity(
+      'REPORT_DOWNLOAD',
+      details: 'Daily Branch Comparison PDF',
     );
   }
 
@@ -400,6 +516,12 @@ class ReportService {
       bytes: await pdf.save(),
       filename: 'report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
+
+    // Log Report Download
+    SessionService.logActivity(
+      'REPORT_DOWNLOAD',
+      details: 'Transaction Report: $title',
+    );
   }
 
   static pw.Widget _buildHeader(
@@ -501,14 +623,15 @@ class ReportService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
       columnWidths: {
-        0: const pw.FixedColumnWidth(70), // Date
-        1: const pw.FixedColumnWidth(35), // Type
-        2: const pw.FlexColumnWidth(2.5), // Description
-        3: const pw.FlexColumnWidth(1.5), // Product
-        4: const pw.FixedColumnWidth(40), // Qty
-        5: const pw.FixedColumnWidth(35), // Unit
-        6: const pw.FixedColumnWidth(45), // Unit Price
-        7: const pw.FixedColumnWidth(55), // Amount
+        0: const pw.FixedColumnWidth(68), // Date
+        1: const pw.FixedColumnWidth(32), // Type
+        2: const pw.FlexColumnWidth(1.3), // Product
+        3: const pw.FlexColumnWidth(1.3), // Farmer
+        4: const pw.FixedColumnWidth(52), // FV ID
+        5: const pw.FixedColumnWidth(32), // Qty
+        6: const pw.FixedColumnWidth(25), // Unit
+        7: const pw.FixedColumnWidth(55), // Unit Price
+        8: const pw.FixedColumnWidth(70), // Amount
       },
       children: [
         // Header Row
@@ -517,8 +640,9 @@ class ReportService {
           children: [
             _buildTableCell('Date', isHeader: true),
             _buildTableCell('Type', isHeader: true),
-            _buildTableCell('Description', isHeader: true),
             _buildTableCell('Product', isHeader: true),
+            _buildTableCell('Farmer', isHeader: true),
+            _buildTableCell('FV ID', isHeader: true),
             _buildTableCell('Qty', isHeader: true, align: pw.TextAlign.right),
             _buildTableCell('Unit', isHeader: true),
             _buildTableCell(
@@ -539,8 +663,9 @@ class ReportService {
             children: [
               _buildTableCell(dateFormat.format(t.date)),
               _buildTableCell(t.type.toUpperCase()),
-              _buildTableCell(t.description),
               _buildTableCell(t.product),
+              _buildTableCell(t.memberName),
+              _buildTableCell(t.fvId),
               _buildTableCell(
                 t.quantity.toStringAsFixed(2),
                 align: pw.TextAlign.right,
@@ -719,6 +844,327 @@ class ReportService {
           );
         }),
       ],
+    );
+  }
+
+  static Future<void> generateStockReport({
+    required List<dynamic> stockData,
+    String? branch,
+  }) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return [
+            pw.Text(
+              'Nature Farming Protocol',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'Branch Inventory (Stock) Report',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text('Date: ${DateFormat('MMM dd, yyyy HH:mm').format(now)}'),
+            if (branch != null) pw.Text('Branch Scope: $branch'),
+            pw.Divider(),
+            pw.SizedBox(height: 20),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(3),
+                2: const pw.FlexColumnWidth(1),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.green),
+                  children: [
+                    _buildTableCell('Branch', isHeader: true),
+                    _buildTableCell('Product Name', isHeader: true),
+                    _buildTableCell(
+                      'Stock Qty',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                  ],
+                ),
+                ...stockData.map((s) {
+                  return pw.TableRow(
+                    children: [
+                      _buildTableCell(s['branchName'] ?? s['branchId']),
+                      _buildTableCell(s['productName']),
+                      _buildTableCell(
+                        (s['currentStock'] as num).toStringAsFixed(2),
+                        align: pw.TextAlign.right,
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'stock_report_${DateFormat('yyyyMMdd').format(now)}.pdf',
+    );
+  }
+
+  static Future<void> generateFinancialReport({
+    required Map<String, dynamic> financialData,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          double totalBuy = 0;
+          double totalSell = 0;
+
+          final rows = financialData.entries.map((e) {
+            final bName = e.key;
+            final data = e.value;
+            final buy = (data['buy'] as num).toDouble();
+            final sell = (data['sell'] as num).toDouble();
+            totalBuy += buy;
+            totalSell += sell;
+
+            return pw.TableRow(
+              children: [
+                _buildTableCell(bName),
+                _buildTableCell(
+                  'Rs. ${NumberFormat('#,###.00').format(buy)}',
+                  align: pw.TextAlign.right,
+                ),
+                _buildTableCell(
+                  'Rs. ${NumberFormat('#,###.00').format(sell)}',
+                  align: pw.TextAlign.right,
+                ),
+                _buildTableCell(
+                  'Rs. ${NumberFormat('#,###.00').format(sell - buy)}',
+                  align: pw.TextAlign.right,
+                ),
+              ],
+            );
+          }).toList();
+
+          return [
+            pw.Text(
+              'Nature Farming Protocol',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'Financial Comparison Report (Branch-wise)',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              'Period: ${DateFormat('yyyy-MM-dd').format(start)} to ${DateFormat('yyyy-MM-dd').format(end)}',
+            ),
+            pw.Divider(),
+            pw.SizedBox(height: 20),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.blueAccent,
+                  ),
+                  children: [
+                    _buildTableCell('Branch Name', isHeader: true),
+                    _buildTableCell(
+                      'Total Buy',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Total Sell',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Net Profit/Loss',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                  ],
+                ),
+                ...rows,
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        'GRAND TOTAL',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    _buildTableCell(
+                      'Rs. ${NumberFormat('#,###.00').format(totalBuy)}',
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Rs. ${NumberFormat('#,###.00').format(totalSell)}',
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Rs. ${NumberFormat('#,###.00').format(totalSell - totalBuy)}',
+                      align: pw.TextAlign.right,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'financial_report_${DateFormat('yyyyMMdd').format(now)}.pdf',
+    );
+  }
+
+  static Future<void> generatePerformanceReport({
+    required List<dynamic> performanceData,
+    required String branch,
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          // Simple Bar Chart Visual in PDF
+          double maxSell = 0;
+          for (var p in performanceData) {
+            double s = (p['sellAmount'] as num).toDouble();
+            if (s > maxSell) maxSell = s;
+          }
+
+          return [
+            pw.Text(
+              'Nature Farming Protocol',
+              style: pw.TextStyle(
+                fontSize: 24,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.green,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Text(
+              'Field Visitor Performance Analysis',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text('Branch: $branch'),
+            pw.Text(
+              'Period: ${DateFormat('yyyy-MM-dd').format(start)} to ${DateFormat('yyyy-MM-dd').format(end)}',
+            ),
+            pw.Divider(),
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'Performance Chart (Sales Volume)',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 10),
+            ...performanceData.map((p) {
+              final sell = (p['sellAmount'] as num).toDouble();
+              final width = maxSell > 0 ? (sell / maxSell) * 400 : 0.0;
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    '${p['name']} (Rs. ${NumberFormat('#,###').format(sell)})',
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Container(
+                    width: width,
+                    height: 10,
+                    color: PdfColors.blueAccent,
+                  ),
+                  pw.SizedBox(height: 8),
+                ],
+              );
+            }),
+            pw.SizedBox(height: 20),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.blueGrey),
+                  children: [
+                    _buildTableCell('Field Visitor', isHeader: true),
+                    _buildTableCell(
+                      'Sales Amount',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Buy Amount',
+                      isHeader: true,
+                      align: pw.TextAlign.right,
+                    ),
+                    _buildTableCell(
+                      'Tx Count',
+                      isHeader: true,
+                      align: pw.TextAlign.center,
+                    ),
+                  ],
+                ),
+                ...performanceData.map((p) {
+                  return pw.TableRow(
+                    children: [
+                      _buildTableCell(p['name']),
+                      _buildTableCell(
+                        'Rs. ${NumberFormat('#,###').format(p['sellAmount'])}',
+                        align: pw.TextAlign.right,
+                      ),
+                      _buildTableCell(
+                        'Rs. ${NumberFormat('#,###').format(p['buyAmount'])}',
+                        align: pw.TextAlign.right,
+                      ),
+                      _buildTableCell(
+                        (p['sellCount'] + p['buyCount']).toString(),
+                        align: pw.TextAlign.center,
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'performance_report_${DateFormat('yyyyMMdd').format(now)}.pdf',
     );
   }
 }

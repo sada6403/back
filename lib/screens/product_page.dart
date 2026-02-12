@@ -6,6 +6,7 @@ import '../config/api_config.dart';
 
 import '../services/product_service.dart';
 import '../services/member_service.dart';
+import '../services/auth_service.dart';
 
 class ProductPage extends StatefulWidget {
   const ProductPage({super.key});
@@ -376,13 +377,14 @@ class _ProductPageState extends State<ProductPage> {
             onPressed: () => Navigator.of(c).pop(),
             child: const Text('Close'),
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(c).pop();
-              _openAddEditDialog(product: p);
-            },
-            child: const Text('Edit'),
-          ),
+          if (AuthService.role != 'analyzer')
+            TextButton(
+              onPressed: () {
+                Navigator.of(c).pop();
+                _openAddEditDialog(product: p);
+              },
+              child: const Text('Edit'),
+            ),
         ],
       ),
     );
@@ -610,36 +612,40 @@ class _ProductPageState extends State<ProductPage> {
                           ),
                           onPressed: () => _showProductDetails(p),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _openAddEditDialog(product: p),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (c) => AlertDialog(
-                                title: const Text('Delete'),
-                                content: const Text('Delete this product?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(c).pop(false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.of(c).pop(true),
-                                    child: const Text('Delete'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok == true) {
-                              ProductService.deleteProduct(p.id);
-                              setState(() {});
-                            }
-                          },
-                        ),
+                        if (AuthService.role != 'analyzer')
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: Colors.blue),
+                            onPressed: () => _openAddEditDialog(product: p),
+                          ),
+                        if (AuthService.role != 'analyzer')
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('Delete'),
+                                  content: const Text('Delete this product?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(c).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(c).pop(true),
+                                      child: const Text('Delete'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (ok == true) {
+                                ProductService.deleteProduct(p.id);
+                                setState(() {});
+                              }
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -649,11 +655,13 @@ class _ProductPageState extends State<ProductPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'product_fab',
-        onPressed: () => _openAddEditDialog(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: (AuthService.role == 'analyzer')
+          ? null
+          : FloatingActionButton(
+              heroTag: 'product_fab',
+              onPressed: () => _openAddEditDialog(),
+              child: const Icon(Icons.add),
+            ),
     );
   }
 

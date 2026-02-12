@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const BranchManager = require('../models/BranchManager');
 const FieldVisitor = require('../models/FieldVisitor');
+const Analyzer = require('../models/Analyzer');
 
 const protect = async (req, res, next) => {
     let token;
@@ -36,6 +37,13 @@ const protect = async (req, res, next) => {
                     throw new Error('IT Sector user not found');
                 }
                 req.user.role = 'it_sector'; // Normalize to 'it_sector' for route authorization
+            } else if (decoded.role === 'analyzer') {
+                req.user = await Analyzer.findById(decoded.id).select('-password');
+                if (!req.user) {
+                    console.error('Analyzer not found in DB for ID:', decoded.id);
+                    throw new Error('Analyzer not found');
+                }
+                req.user.role = 'analyzer';
             } else {
                 console.warn('Invalid role in token:', decoded.role);
                 return res.status(401).json({ message: 'Not authorized, invalid role' });

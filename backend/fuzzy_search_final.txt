@@ -1,0 +1,53 @@
+﻿Connected to MongoDB
+
+--- Searching fieldvisitors ---
+Found 2 matches for fragment [Dalind]:
+  _id: 6982f5394dfea6ac2b942a44 | Name: Dalindan Saliny | Phone: 0763108603 | NIC: 200174502075
+  _id: 698b0de01816c1545288d0b5 | Name: Dalindan Saliny | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Saliny]:
+  _id: 6982f5394dfea6ac2b942a44 | Name: Dalindan Saliny | Phone: 0763108603 | NIC: 200174502075
+  _id: 698b0de01816c1545288d0b5 | Name: Dalindan Saliny | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Rathika]:
+  _id: 69835d35dea266141468ba5f | Name: Perampalarasan Rathika | Phone: 0767992418 | NIC: 927373971v
+  _id: 698b0de11816c1545288d0be | Name: Perampalarasan Rathika | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [kalaivany]:
+  _id: 69836324dea266141468ba6e | Name: Sasikaran kalaivany | Phone: 0765476914 | NIC: 978081886v
+  _id: 698b0de11816c1545288d0c4 | Name: Sasikaran kalaivany | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Sasikala]:
+  _id: 69836fe5dea266141468ba86 | Name: Sunmugaraja Sasikala | Phone: 0768767857 | NIC: 876724260v
+  _id: 698b0de21816c1545288d0ca | Name: Sunmugaraja Sasikala | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Abiramy]:
+  _id: 69843eeddea266141468cd56 | Name: Yokesvaran Abiramy | Phone: 0743357792 | NIC: 198186101420
+  _id: 698b0de21816c1545288d0d0 | Name: Yokesvaran Abiramy | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Sivasri]:
+  _id: 698446c6dea266141468cf61 | Name: Vadivel Sivasri | Phone: 0712458295 | NIC: 755733008v
+  _id: 698b0de31816c1545288d0d6 | Name: Vadivel Sivasri | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Tharsiny]:
+  _id: 69844a0fdea266141468cfd9 | Name: Raveenthirakumar Tharsiny | Phone: 0775328342 | NIC: 798145401v
+  _id: 698b0de31816c1545288d0dc | Name: Raveenthirakumar Tharsiny | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Sakila]:
+  _id: 6986c7a6d20caad0420283cd | Name: Thevalingam Sakila | Phone: 0771431338 | NIC: 946264504v
+  _id: 698b0de41816c1545288d0e2 | Name: Thevalingam Sakila | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Thabojini]:
+  _id: 6986cc1ad20caad042028479 | Name: JeevananthanThabojini | Phone: 0779264129 | NIC: 767811578v
+  _id: 698b0de41816c1545288d0e8 | Name: Jeevananthan Thabojini | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Nishanthini]:
+  _id: 6986f000d20caad042028b2d | Name: Sivatharsan Nishanthini | Phone: 0763442629 | NIC: 826785373v
+  _id: 698b0de51816c1545288d0ee | Name: Sivatharsan Nishanthini | Phone: 0770000000 | NIC: undefined
+Found 2 matches for fragment [Pakeerathy]:
+  _id: 6986fb64d20caad042028c72 | Name: Elangeswaran Pakeerathy | Phone: 0778701329 | NIC: 946123978v
+  _id: 698b0de51816c1545288d0f4 | Name: Elangeswaran Pakeerathy | Phone: 0770000000 | NIC: undefined
+
+--- Searching branchmanagers ---
+Found 1 matches for fragment [kalaivany]:
+  _id: 6975b957967fe808871482d8 | Name: SRIKANTHAN KALAIVANY | Phone: 776355774 | NIC: 
+
+--- Searching members ---
+Found 3 matches for fragment [Sasikala]:
+  _id: 6986bf2fd20caad0420282ba | Name: santhira kumar sasikala | Phone: 0753629283 | NIC: 825500090v
+  _id: 6989b32ad20caad04202ae96 | Name: yogarasa sasikala | Phone: 0768116892 | NIC: 787040136V
+  _id: 698ab37bd20caad04202b63e | Name: Nanthakumar sasikala | Phone: 0756461722 | NIC: 856920640v
+
+--- Searching itsectors ---
+
+--- Searching users ---

@@ -7,12 +7,14 @@ const {
     changePassword,
     forgotPassword,
     verifyOTPEndpoint,
-    resetPassword
+    resetPassword,
+    registerAnalyzer
 } = require('../controllers/authController');
 
 router.post('/login', loginUser);
 router.post('/register', registerManager);
 router.post('/register/it-sector', registerITSector);
+router.post('/register/analyzer', registerAnalyzer);
 router.patch('/change-password', changePassword);
 
 // Password reset routes

@@ -30,14 +30,44 @@ class _LoginButtonState extends State<LoginButton> {
       return;
     }
 
+    // Determine role based on User ID prefix
+    String roleToUse = 'it_sector';
+    if (enteredUser.toUpperCase().startsWith('AZ') ||
+        enteredUser.contains('@')) {
+      // If it's an email or starts with AZ, it could be an analyzer
+      roleToUse = 'analyzer';
+    }
+
     setState(() => _isLoading = true);
 
-    // Call async login with 'it_sector' role as this app is for IT only
-    final success = await AuthService.login(
+    // Call async login
+    bool success = await AuthService.login(
       enteredUser,
       enteredPass,
-      role: 'it_sector',
+      role: roleToUse,
     );
+
+    // If failed, and role was 'analyzer' (detected from email), try 'it_sector' as fallback
+    if (!success && roleToUse == 'analyzer' && enteredUser.contains('@')) {
+      debugPrint('Login failed as Analyzer, retrying as IT Sector...');
+      success = await AuthService.login(
+        enteredUser,
+        enteredPass,
+        role: 'it_sector',
+      );
+      if (success) roleToUse = 'it_sector';
+    }
+
+    // If still failed, and role was 'it_sector', try 'manager' as fallback
+    if (!success && roleToUse == 'it_sector') {
+      debugPrint('Login failed as IT Sector, retrying as Manager...');
+      success = await AuthService.login(
+        enteredUser,
+        enteredPass,
+        role: 'manager',
+      );
+      if (success) roleToUse = 'manager';
+    }
 
     if (!mounted) return;
 
@@ -65,8 +95,9 @@ class _LoginButtonState extends State<LoginButton> {
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid User ID or Password (or connection failed)'),
+        SnackBar(
+          content: Text(AuthService.lastError ?? 'Invalid User ID or Password'),
+          backgroundColor: Colors.red,
         ),
       );
     }

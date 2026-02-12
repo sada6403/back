@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'session_service.dart';
 
 class AuthService {
   // Static user data to hold session info
@@ -17,53 +18,21 @@ class AuthService {
   static String? avatarPath;
   static String email = '';
   static String mobile = '';
+  static String? lastError; // To store error message
 
-  static String? sessionId;
-
-  static Future<void> _startSession() async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/analysis/session/start'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': userId,
-          'username': firstName,
-          'role': role,
-          // 'ipAddress': '', // Could fetch IP if needed
-          'deviceInfo': 'Flutter App',
-        }),
-      );
-      debugPrint(
-        'Session Start Response: ${response.statusCode} - ${response.body}',
-      );
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        sessionId = body['sessionId'];
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('session_id', sessionId!);
-      } else {
-        debugPrint('FAILED TO START SESSION: ${response.body}');
-      }
-    } catch (e) {
-      debugPrint('Session Start Exception: $e');
-    }
-  }
-
-  static Future<void> _endSession() async {
+  static Future<void> init() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final sid = sessionId ?? prefs.getString('session_id');
-      if (sid == null) return;
+      token = prefs.getString('token');
+      role = prefs.getString('user_role') ?? '';
+      branchId = prefs.getString('user_branch_id') ?? '';
 
-      await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/analysis/session/end'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'sessionId': sid}),
+      // We could store more if needed, but these are core for most logic
+      debugPrint(
+        '[AuthService] Initialized: token=${token != null}, role=$role',
       );
-      sessionId = null;
-      await prefs.remove('session_id');
     } catch (e) {
-      debugPrint('Session End Error: $e');
+      debugPrint('[AuthService] Initialization error: $e');
     }
   }
 
@@ -109,17 +78,19 @@ class AuthService {
           // Debug Role
           debugPrint('LOGIN SUCCESS: Role=$role');
 
-          // Start Session for IT Sector / Admin (or if role is basically anything other than standard user)
-          if (AuthService.role.toLowerCase().contains('it') ||
-              AuthService.role.toLowerCase() == 'admin' ||
-              AuthService.role == 'it_sector') {
-            debugPrint('Starting Session for role: ${AuthService.role}');
-            await _startSession();
-          } else {
-            debugPrint('Skipping Session Start for role: ${AuthService.role}');
-          }
+          // Start session tracking for all users
+          await SessionService.startSession();
 
           return true;
+        } else {
+          lastError = body['message'] ?? 'Login failed';
+        }
+      } else {
+        try {
+          final body = jsonDecode(response.body);
+          lastError = body['message'] ?? 'Server Error: ${response.statusCode}';
+        } catch (_) {
+          lastError = 'Server Error: ${response.statusCode}';
         }
       }
 
@@ -127,6 +98,7 @@ class AuthService {
       return false;
     } catch (e) {
       debugPrint('CRITICAL LOGIN ERROR: $e');
+      lastError = 'Connection Failed: $e';
       return false;
     }
   }
@@ -347,7 +319,7 @@ class AuthService {
   }
 
   static Future<void> logout() async {
-    await _endSession();
+    await SessionService.endSession(reason: 'logout');
     userId = null;
     dbId = null;
     token = null;

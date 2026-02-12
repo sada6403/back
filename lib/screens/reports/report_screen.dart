@@ -4,6 +4,7 @@ import '../../services/transaction_service.dart';
 import '../../services/employee_service.dart';
 
 import '../../models/transaction.dart';
+import 'advanced_reports_screen.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -132,6 +133,30 @@ class _ReportScreenState extends State<ReportScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
+              'Quick Actions',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AdvancedReportsScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.analytics),
+              label: const Text('View Advanced Analytics'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
+                foregroundColor: Colors.blueAccent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: Colors.blueAccent, width: 1),
+              ),
+            ),
+            const SizedBox(height: 32),
+            const Text(
               'Select Report Criteria',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -179,7 +204,7 @@ class _ReportScreenState extends State<ReportScreen> {
             // Branch Dropdown
             InputDecorator(
               decoration: const InputDecoration(
-                labelText: 'Branch Scope',
+                labelText: 'Area Scope',
                 border: OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 10,

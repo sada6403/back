@@ -13,6 +13,10 @@ class Transaction {
   final String unit;
   final double unitPrice;
 
+  final String memberName;
+  final String fvId;
+  final String billNumber;
+
   Transaction({
     this.id = '', // Default empty if not from DB
     required this.date,
@@ -26,6 +30,9 @@ class Transaction {
     this.quantity = 0.0,
     this.unit = '',
     this.unitPrice = 0.0,
+    this.memberName = 'N/A',
+    this.fvId = 'N/A',
+    this.billNumber = '',
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -53,6 +60,13 @@ class Transaction {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0.0,
       unit: json['unitType'] as String? ?? '',
       unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
+      memberName: (json['memberId'] is Map)
+          ? (json['memberId']['name'] as String? ?? 'N/A')
+          : 'N/A',
+      fvId: (json['fieldVisitorId'] is Map)
+          ? (json['fieldVisitorId']['userId'] as String? ?? 'N/A')
+          : 'N/A',
+      billNumber: json['billNumber'] as String? ?? '',
     );
   }
 

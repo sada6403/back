@@ -8,8 +8,11 @@ import 'dart:io';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/employee_service.dart';
+import '../services/auth_service.dart';
 
 import '../services/audit_service.dart';
+import '../services/monitoring_service.dart';
+import 'dart:async';
 
 class EmployeePage extends StatefulWidget {
   const EmployeePage({super.key});
@@ -19,6 +22,8 @@ class EmployeePage extends StatefulWidget {
 }
 
 class _EmployeePageState extends State<EmployeePage> {
+  Timer? _onlineTimer;
+  Set<String> _onlineUserIds = {};
   final TextEditingController _searchCtrl = TextEditingController();
   String? _filterId;
   String? _filterPosition;
@@ -31,13 +36,41 @@ class _EmployeePageState extends State<EmployeePage> {
   @override
   void initState() {
     super.initState();
+    _fetchOnlineStatus();
+    _onlineTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _fetchOnlineStatus(),
+    );
     EmployeeService.init().then((_) {
       setState(() {});
     });
   }
 
+  Future<void> _fetchOnlineStatus() async {
+    try {
+      final res = await MonitoringService.getOnlineUsers();
+      if (res['success'] == true) {
+        final List<dynamic> users = res['data'] ?? [];
+        if (mounted) {
+          setState(() {
+            _onlineUserIds = users
+                .where((u) {
+                  final role = (u['role'] ?? '').toString().toLowerCase();
+                  return role.contains('it') || role.contains('admin');
+                })
+                .map((u) => u['userId']?.toString() ?? '')
+                .toSet();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching online status: $e');
+    }
+  }
+
   @override
   void dispose() {
+    _onlineTimer?.cancel();
     _searchCtrl.dispose();
     if (_editingRow != null) {
       _editingRow!.dispose();
@@ -254,6 +287,8 @@ class _EmployeePageState extends State<EmployeePage> {
     // Determine Prefix
     if (role == 'Field Visitor') {
       prefix = 'FV';
+    } else if (role == 'Analyzer') {
+      prefix = 'AZ';
     } else if (role.contains('Manager')) {
       prefix = 'BM'; // Changed from MGR to BM
     } else {
@@ -384,14 +419,17 @@ class _EmployeePageState extends State<EmployeePage> {
       newEmp.permanentAddress = _newRow!.permanentAddress.text;
       newEmp.education = _newRow!.education.text;
       newEmp.civilStatus = _newRow!.civilStatus.text;
-      newEmp.assignedArea = _newRow!.assignedArea.text;
+      newEmp.assignedArea = _newRow!.assignedArea.text.isNotEmpty
+          ? _newRow!.assignedArea.text
+          : _newRow!.branchName.text;
       newEmp.targetAmount = double.tryParse(_newRow!.targetAmount.text) ?? 0.0;
       newEmp.status = _newRow!.status;
 
-      // Auto-generate password
+      // Ensure password is set from our generation
       final generatedPassword = _generateRandomPassword();
       newEmp.password = generatedPassword;
 
+      debugPrint('Adding employee: ${newEmp.toJson()}');
       await EmployeeService.addEmployee(newEmp);
 
       if (!mounted) return;
@@ -451,7 +489,7 @@ class _EmployeePageState extends State<EmployeePage> {
         // 1: Role
         DataCell(_buildInlineField(_newRow!.role, 'Role')),
         // 2: Branch/Area
-        DataCell(_buildInlineField(_newRow!.branchName, 'Branch')),
+        DataCell(_buildInlineField(_newRow!.branchName, 'Area')),
         // 3: Name
         DataCell(_buildInlineField(_newRow!.fullName, 'Name')),
         // 4: NIC
@@ -472,7 +510,7 @@ class _EmployeePageState extends State<EmployeePage> {
         DataCell(_buildInlineField(_newRow!.salary, 'Salary', isNumber: true)),
         // 12-15: Bank
         DataCell(_buildInlineField(_newRow!.bankName, 'Bank')),
-        DataCell(_buildInlineField(_newRow!.bankBranch, 'Branch')),
+        DataCell(_buildInlineField(_newRow!.bankBranch, 'Area')),
         DataCell(_buildInlineField(_newRow!.accountNo, 'Acc No')),
         DataCell(_buildInlineField(_newRow!.accountHolder, 'Holder')),
         // 17: Status
@@ -598,6 +636,8 @@ class _EmployeePageState extends State<EmployeePage> {
     final c = code.toLowerCase().trim();
     if (c == 'jk') return 'Jaffna (Kondavil)';
     if (c == 'js') return 'Jaffna (Chavakachcheri)';
+    if (c == 'ka') return 'Kandawalai';
+    if (c == 'kc') return 'Karachchi';
     if (c == 'km') return 'Kalmunai';
     if (c == 'tm') return 'Trincomalee';
     if (c == 'ap') return 'Akkaraipattu';
@@ -1445,10 +1485,14 @@ class _EmployeePageState extends State<EmployeePage> {
       employees = employees.where((e) => e.role == _filterPosition).toList();
     }
 
-    // 3. Filter by Branch
+    // 3. Filter by Area
     if (_filterBranch != null && _filterBranch!.isNotEmpty) {
       employees = employees
-          .where((e) => _getBranchOrArea(e) == _filterBranch)
+          .where(
+            (e) =>
+                _getBranchOrArea(e).toLowerCase() ==
+                _filterBranch!.toLowerCase(),
+          )
           .toList();
     }
 
@@ -1460,11 +1504,12 @@ class _EmployeePageState extends State<EmployeePage> {
         ),
         backgroundColor: const Color(0xFF1F2937),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.payments),
-            tooltip: 'Pay Salaries',
-            onPressed: _onPaySalaries,
-          ),
+          if (AuthService.role != 'analyzer')
+            IconButton(
+              icon: const Icon(Icons.payments),
+              tooltip: 'Pay Salaries',
+              onPressed: _onPaySalaries,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
@@ -1547,7 +1592,7 @@ class _EmployeePageState extends State<EmployeePage> {
                           Expanded(
                             child: InputDecorator(
                               decoration: const InputDecoration(
-                                labelText: 'Branch',
+                                labelText: 'Area',
                                 border: OutlineInputBorder(),
                                 contentPadding: EdgeInsets.symmetric(
                                   vertical: 0,
@@ -1710,7 +1755,7 @@ class _EmployeePageState extends State<EmployeePage> {
                                 items: [
                                   const DropdownMenuItem(
                                     value: null,
-                                    child: Text('All Branches'),
+                                    child: Text('All Areas'),
                                   ),
                                   ...allBranches.map(
                                     (b) => DropdownMenuItem(
@@ -1778,7 +1823,7 @@ class _EmployeePageState extends State<EmployeePage> {
                     ),
                     DataColumn(
                       label: Text(
-                        'BRANCH',
+                        'AREA',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -1885,7 +1930,7 @@ class _EmployeePageState extends State<EmployeePage> {
                     ),
                     DataColumn(
                       label: Text(
-                        'BANK BRANCH',
+                        'BANK AREA',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -2209,13 +2254,38 @@ class _EmployeePageState extends State<EmployeePage> {
                                   Container(
                                     padding: const EdgeInsets.all(4),
                                     color: const Color(0xFF1F2937),
-                                    child: Text(
-                                      e.fullName,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.outfit(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (_onlineUserIds.contains(e.userId) ||
+                                            _onlineUserIds.contains(e.id))
+                                          Container(
+                                            margin: const EdgeInsets.only(
+                                              right: 6,
+                                            ),
+                                            width: 8,
+                                            height: 8,
+                                            decoration: const BoxDecoration(
+                                              color: Colors.green,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.green,
+                                                  blurRadius: 4,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        Text(
+                                          e.fullName,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.outfit(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -2379,7 +2449,9 @@ class _EmployeePageState extends State<EmployeePage> {
                                 DataCell(
                                   Switch(
                                     value: e.status == 'active',
-                                    onChanged: (val) => _toggleStatus(e),
+                                    onChanged: AuthService.role == 'analyzer'
+                                        ? null
+                                        : (val) => _toggleStatus(e),
                                     activeThumbColor: Colors.green,
                                     inactiveThumbColor: Colors.red,
                                     inactiveTrackColor: Colors.red.withAlpha(
@@ -2402,14 +2474,15 @@ class _EmployeePageState extends State<EmployeePage> {
                                             _showEmployeeDetails(e),
                                         tooltip: 'View Details',
                                       ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.edit,
-                                          color: Colors.blue,
-                                          size: 20,
+                                      if (AuthService.role != 'analyzer')
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.edit,
+                                            color: Colors.blue,
+                                            size: 20,
+                                          ),
+                                          onPressed: () => _startEditing(e),
                                         ),
-                                        onPressed: () => _startEditing(e),
-                                      ),
                                       IconButton(
                                         icon: const Icon(
                                           Icons.print,
@@ -2420,7 +2493,8 @@ class _EmployeePageState extends State<EmployeePage> {
                                             _generateAndDownloadPdf(e),
                                       ),
                                       if (e.role.toLowerCase() != 'it_sector' &&
-                                          e.role.toLowerCase() != 'it sector')
+                                          e.role.toLowerCase() != 'it sector' &&
+                                          AuthService.role != 'analyzer')
                                         IconButton(
                                           icon: const Icon(
                                             Icons.delete,
@@ -2509,26 +2583,27 @@ class _EmployeePageState extends State<EmployeePage> {
             ),
           ),
           // Add Button Bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF111827),
-            child: ElevatedButton.icon(
-              onPressed: _startAdding,
-              icon: const Icon(Icons.add_circle, color: Colors.white),
-              label: Text(
-                'ADD NEW ROW',
-                style: GoogleFonts.outfit(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+          if (AuthService.role != 'analyzer')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: const Color(0xFF111827),
+              child: ElevatedButton.icon(
+                onPressed: _startAdding,
+                icon: const Icon(Icons.add_circle, color: Colors.white),
+                label: Text(
+                  'ADD NEW ROW',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1F2937),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF1F2937),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
             ),
-          ),
         ],
       ),
     );

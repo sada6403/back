@@ -191,16 +191,53 @@ const createTransaction = async (req, res) => {
 // @access  Private
 const getTransactions = async (req, res) => {
     try {
-        const { memberId, type, fieldVisitorId, startDate, endDate, branchId: queryBranchId } = req.query;
+        const { memberId, type, fieldVisitorId, startDate, endDate, billNumber, branchId: queryBranchId } = req.query;
         // If logged in, use user's branch. If not (Management IT), use query param or show all/default.
-        const branchId = req.user?.branchId || queryBranchId;
+        const userBranchId = req.user?.branchId;
+        const userRole = req.user?.role;
 
         const query = {};
-        if (branchId) query.branchId = branchId;
+
+        // IT Sector and Admin can see all branches. Others are restricted to their own.
+        const isIT = ['it_sector', 'admin', 'it'].includes(userRole);
+
+        let effectiveBranchId = queryBranchId;
+        if (effectiveBranchId && effectiveBranchId !== 'All') {
+            const bRec = await BranchManager.findOne({
+                $or: [{ branchId: effectiveBranchId }, { branchName: effectiveBranchId }]
+            }).select('branchId').lean();
+            if (bRec) {
+                effectiveBranchId = bRec.branchId;
+            }
+        }
+
+        if (!isIT) {
+            // Restriction for normal users
+            if (userBranchId) {
+                query.branchId = userBranchId;
+            } else if (effectiveBranchId) {
+                query.branchId = effectiveBranchId;
+            }
+        } else if (effectiveBranchId) {
+            // IT can optionally filter by branch
+            query.branchId = effectiveBranchId;
+        }
 
         if (memberId) query.memberId = memberId;
         if (fieldVisitorId) query.fieldVisitorId = fieldVisitorId;
         if (type) query.type = type.toString().toLowerCase();
+
+        const searchBill = billNumber || req.query.billNumber;
+        if (searchBill) {
+            const bn = searchBill.trim();
+            // Use exact match if it looks like a full bill number (NF-X-YYYYMMDD-NNNNN)
+            // NF-B-20260211-00008 is 19 chars. Let's check >= 13 to be safe.
+            if (bn.startsWith('NF-') && bn.length >= 13) {
+                query.billNumber = bn;
+            } else {
+                query.billNumber = { $regex: bn, $options: 'i' };
+            }
+        }
 
         if (startDate && endDate) {
             query.date = {
@@ -209,11 +246,10 @@ const getTransactions = async (req, res) => {
             };
         }
 
-        console.log('[getTransactions] branchId filter:', branchId);
         const transactions = await Transaction.find(query)
             .sort({ date: -1 })
-            .populate('memberId', 'name mobile branchId')
-            .populate('fieldVisitorId', 'name userId branchId');
+            .populate('memberId', 'name memberId contact branchId')
+            .populate('fieldVisitorId', 'fullName userId branchId');
 
         res.json({ success: true, count: transactions.length, data: transactions });
     } catch (error) {
@@ -319,13 +355,44 @@ const downloadBill = async (req, res) => {
     }
 };
 
-// @desc    Update transaction status
+// @desc    Update transaction status (Manager/Admin)
 // @route   PATCH /api/transactions/:id
-// @access  Private (Manager only)
+// @access  Private
 const updateTransactionStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, approvedBy, approvedAt, note } = req.body;
+        const { status, approvedBy, note } = req.body;
+
+        const transaction = await Transaction.findById(id);
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+
+        transaction.status = status;
+        if (approvedBy) transaction.approvedBy = approvedBy;
+        transaction.approvedAt = new Date();
+        if (note !== undefined) transaction.note = note;
+
+        const updated = await transaction.save();
+
+        res.json({
+            success: true,
+            message: `Transaction ${status} successfully`,
+            data: updated
+        });
+    } catch (error) {
+        console.error('[updateTransactionStatus] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to update transaction status', error: error.message });
+    }
+};
+
+// @desc    Update transaction details
+// @route   PUT /api/transactions/:id
+// @access  Private (Manager only)
+const updateTransaction = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { productName, quantity, unitPrice, totalAmount, type, status, note } = req.body;
 
         const transaction = await Transaction.findById(id);
         if (!transaction) {
@@ -333,21 +400,71 @@ const updateTransactionStatus = async (req, res) => {
         }
 
         // Update fields
+        if (productName) transaction.productName = productName;
+        if (quantity) transaction.quantity = Number(quantity);
+        if (unitPrice) transaction.unitPrice = Number(unitPrice);
+        if (type) transaction.type = type.toLowerCase();
         if (status) transaction.status = status;
-        if (approvedBy) transaction.approvedBy = approvedBy;
-        if (approvedAt) transaction.approvedAt = approvedAt;
-        if (note) transaction.note = note;
+        if (note !== undefined) transaction.note = note;
+
+        // Recalculate total if needed
+        if (quantity || unitPrice) {
+            transaction.totalAmount = transaction.quantity * transaction.unitPrice;
+        } else if (totalAmount) {
+            transaction.totalAmount = Number(totalAmount);
+        }
 
         const updated = await transaction.save();
 
         res.json({
             success: true,
+            message: 'Transaction updated successfully',
             data: updated
         });
     } catch (error) {
-        console.error('[updateStatus] Error:', error.message);
-        res.status(500).json({ success: false, message: 'Failed to update status', error: error.message });
+        console.error('[updateTransaction] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to update transaction', error: error.message });
     }
 };
 
-module.exports = { createTransaction, getTransactions, downloadBill, updateTransactionStatus };
+// @desc    Delete transaction
+// @route   DELETE /api/transactions/:id
+// @access  Private (Manager only)
+const deleteTransaction = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const transaction = await Transaction.findById(id);
+        if (!transaction) {
+            return res.status(404).json({ success: false, message: 'Transaction not found' });
+        }
+
+        await Transaction.findByIdAndDelete(id);
+
+        res.json({
+            success: true,
+            message: 'Transaction deleted successfully'
+        });
+    } catch (error) {
+        console.error('[deleteTransaction] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to delete transaction', error: error.message });
+    }
+};
+
+const queryEcho = (req, res) => {
+    res.json({
+        query: req.query,
+        user: req.user ? { id: req.user._id, role: req.user.role, branchId: req.user.branchId } : null,
+        url: req.originalUrl
+    });
+};
+
+module.exports = {
+    createTransaction,
+    getTransactions,
+    downloadBill,
+    updateTransactionStatus,
+    updateTransaction,
+    deleteTransaction,
+    queryEcho
+};

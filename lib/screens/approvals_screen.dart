@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../models/transaction.dart';
 import '../services/transaction_service.dart';
+import '../services/auth_service.dart';
 
 class ApprovalsScreen extends StatefulWidget {
   const ApprovalsScreen({super.key});
@@ -34,6 +35,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
   }
 
   Future<void> _processTransaction(Transaction t, bool approve) async {
+    if (AuthService.role == 'analyzer') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: View-only role'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     final success = await TransactionService.updateStatus(
       t.id,
       approve ? 'approved' : 'rejected',

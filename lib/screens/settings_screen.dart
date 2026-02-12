@@ -6,6 +6,7 @@ import '../services/employee_service.dart';
 import '../services/member_service.dart';
 import '../services/product_service.dart';
 import '../utils/admin_seeder.dart';
+import '../services/auth_service.dart';
 import 'audit_log_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -29,7 +30,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString('api_base_url') ?? ApiConfig.baseUrl;
+    String url = prefs.getString('api_base_url') ?? ApiConfig.baseUrl;
+
+    // Force update if it's localhost (migration to AWS)
+    if (url.contains('localhost') || url.contains('10.0.2.2')) {
+      url = ApiConfig.baseUrl;
+      await prefs.setString('api_base_url', url);
+    }
+
     _urlCtrl.text = url;
     // Ensure config is in sync if loaded for first time
     if (url != ApiConfig.baseUrl) {
@@ -38,6 +46,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
+    if (AuthService.role == 'analyzer') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Access Denied: View-only role'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     setState(() {
       _isLoading = true;
       _statusMessage = 'Testing connection...';
@@ -208,17 +225,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Reload all data from database',
                 style: GoogleFonts.outfit(fontSize: 12),
               ),
-              onTap: () async {
-                setState(() => _isLoading = true);
-                await EmployeeService.fetchEmployees();
-                await MemberService.fetchMembers();
-                await ProductService.fetchProducts();
-                setState(() {
-                  _isLoading = false;
-                  _statusMessage = 'All data synchronized.';
-                  _statusColor = Colors.green;
-                });
-              },
+              onTap: AuthService.role == 'analyzer'
+                  ? null
+                  : () async {
+                      setState(() => _isLoading = true);
+                      await EmployeeService.fetchEmployees();
+                      await MemberService.fetchMembers();
+                      await ProductService.fetchProducts();
+                      setState(() {
+                        _isLoading = false;
+                        _statusMessage = 'All data synchronized.';
+                        _statusColor = Colors.green;
+                      });
+                    },
             ),
             ListTile(
               leading: const Icon(Icons.people_outline, color: Colors.purple),
@@ -227,15 +246,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Onboard Admin Team (SMS Credentials)',
                 style: GoogleFonts.outfit(fontSize: 12),
               ),
-              onTap: () async {
-                setState(() => _isLoading = true);
-                final result = await AdminSeeder.syncITTeam(context);
-                setState(() {
-                  _isLoading = false;
-                  _statusMessage = result;
-                  _statusColor = Colors.purple;
-                });
-              },
+              onTap: AuthService.role == 'analyzer'
+                  ? null
+                  : () async {
+                      setState(() => _isLoading = true);
+                      final result = await AdminSeeder.syncITTeam(context);
+                      setState(() {
+                        _isLoading = false;
+                        _statusMessage = result;
+                        _statusColor = Colors.purple;
+                      });
+                    },
             ),
             ListTile(
               leading: const Icon(Icons.security, color: Colors.orange),
@@ -271,7 +292,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 'Generate and email new password via User ID',
                 style: GoogleFonts.outfit(fontSize: 12),
               ),
-              onTap: () => _showResetPasswordDialog(),
+              onTap: AuthService.role == 'analyzer'
+                  ? null
+                  : () => _showResetPasswordDialog(),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
+import 'session_service.dart';
 
 class Product {
   String id;
@@ -106,6 +107,11 @@ class ProductService {
         for (final e in list) {
           _products.add(Product.fromJson(e as Map<String, dynamic>));
         }
+        // Log Data View
+        SessionService.logActivity(
+          'DATA_VIEW',
+          details: 'Fetched Product List',
+        );
       }
     } catch (e) {
       debugPrint('Error fetching products: $e');

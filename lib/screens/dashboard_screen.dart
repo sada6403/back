@@ -10,6 +10,7 @@ import '../services/product_service.dart';
 import '../services/employee_service.dart';
 import '../services/member_service.dart';
 import '../services/health_service.dart';
+import '../services/session_service.dart';
 
 import 'employee_page.dart';
 import 'members_page.dart';
@@ -20,6 +21,9 @@ import 'messaging/bulk_message_screen.dart';
 import 'settings_screen.dart';
 import 'approvals_screen.dart';
 import 'analysis_page.dart';
+import 'monitoring_dashboard.dart';
+import 'transaction_control_screen.dart';
+import '../services/monitoring_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -33,6 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _timer;
   bool _isDbConnected = false;
   bool _isCheckingDb = true;
+  int _totalOnline = 0;
+  List<String> _onlineUserNames = [];
 
   @override
   void initState() {
@@ -44,6 +50,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _checkConnectivity();
       _fetchData();
     });
+
+    // Log Screen View
+    SessionService.logActivity('SCREEN_VIEW', details: 'Main Dashboard');
   }
 
   @override
@@ -66,6 +75,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await ProductService.init();
     await EmployeeService.init();
     await MemberService.init();
+    try {
+      final statsRes = await MonitoringService.getStats();
+      if (statsRes['success'] == true) {
+        // We will recalculate totalOnline based on filtered list below
+      }
+      final onlineRes = await MonitoringService.getOnlineUsers();
+      if (onlineRes['success'] == true) {
+        final List<dynamic> users = onlineRes['data'] ?? [];
+        // Filter to only IT, Admin, and Analyzer users
+        final itUsers = users.where((u) {
+          final role = (u['role'] ?? '').toString().toLowerCase();
+          return role.contains('it') ||
+              role.contains('admin') ||
+              role.contains('analyzer');
+        }).toList();
+
+        _totalOnline = itUsers.length;
+        _onlineUserNames = itUsers
+            .map(
+              (u) =>
+                  u['username']?.toString() ??
+                  u['userId']?.toString() ??
+                  'Unknown',
+            )
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching monitoring stats: $e');
+    }
     if (mounted) {
       try {
         setState(() {});
@@ -126,41 +164,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return EmployeeService.getSalaryPayments();
   }
 
-  Widget _cardMetric(String title, String value, {IconData? icon}) {
+  Widget _cardMetric(
+    String title,
+    String value, {
+    IconData? icon,
+    VoidCallback? onTap,
+    List<String>? subItems,
+  }) {
     return Card(
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 24, color: Colors.blue),
-              const SizedBox(width: 8),
-            ],
-            Flexible(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 24, color: Colors.blue),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (subItems != null && subItems.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subItems.take(3).join(', ') +
+                            (subItems.length > 3 ? '...' : ''),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -169,58 +229,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildQuickActions() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
-                );
-              },
-              icon: const Icon(Icons.send, color: Colors.white),
-              label: const Text('Send Wishes'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+          Row(
+            children: [
+              if (AuthService.role != 'analyzer')
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const BulkMessageScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    label: const Text('Send Wishes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              if (AuthService.role != 'analyzer') const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const ReportScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                  label: const Text('Reports'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              if (AuthService.role != 'analyzer') const SizedBox(width: 8),
+              if (AuthService.role != 'analyzer')
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ApprovalsScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.approval, color: Colors.white),
+                    label: const Text('Approvals'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (AuthService.role != 'analyzer')
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const TransactionControlScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.search, color: Colors.white),
+                label: const Text('Transaction Control (Bill Search)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E293B),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ReportScreen()));
-              },
-              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-              label: const Text('Reports'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ApprovalsScreen()),
-                );
-              },
-              icon: const Icon(Icons.approval, color: Colors.white),
-              label: const Text('Approvals'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange[800],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -345,6 +436,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'LKR ${memberSold.toStringAsFixed(2)}',
                       icon: Icons.store,
                     ),
+                    _cardMetric(
+                      'Online Now',
+                      '$_totalOnline',
+                      icon: Icons.online_prediction,
+                      subItems: _onlineUserNames,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const MonitoringDashboard(),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 );
               },
@@ -397,7 +501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon: Icons.people_alt,
                     ),
                     _cardMetric(
-                      'Branch Managers',
+                      'Area Managers',
                       '${positionCounts['Branch Manager'] ?? 0}',
                       icon: Icons.admin_panel_settings,
                     ),
@@ -410,6 +514,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'IT Sector',
                       '${positionCounts['IT Sector'] ?? 0}',
                       icon: Icons.computer,
+                    ),
+                    _cardMetric(
+                      'Analyzers',
+                      '${positionCounts['Analyzer'] ?? 0}',
+                      icon: Icons.analytics,
                     ),
                   ],
                 );
@@ -716,17 +825,24 @@ class AppDrawer extends StatelessWidget {
               context,
             ).push(MaterialPageRoute(builder: (_) => const ReportScreen())),
           ),
-          _buildDrawerItem(
-            text: 'Send Wishes',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
+          if (AuthService.role != 'analyzer')
+            _buildDrawerItem(
+              text: 'Send Wishes',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
+              ),
             ),
-          ),
           _buildDrawerItem(
             text: 'Analysis',
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const AnalysisPage())),
+          ),
+          _buildDrawerItem(
+            text: 'User Monitoring',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const MonitoringDashboard()),
+            ),
           ),
         ],
       ),

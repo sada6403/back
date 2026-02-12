@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../models/transaction.dart';
 
 import '../config/api_config.dart';
+import 'api_service.dart';
+import 'session_service.dart';
 
 class TransactionService {
   static String get _baseUrl => ApiConfig.transactions;
@@ -49,18 +51,13 @@ class TransactionService {
     String? note,
   }) async {
     try {
-      // Assuming backend has a generic update or specific endpoint
-      // Using a PATCH-like approach on the ID
       final url = '$_baseUrl/$transactionId';
-      // If your backend doesn't support ID in URL yet, we might need a different approach.
-      // For now, I'll assume standard REST: PUT/PATCH /transactions/:id
-
       final response = await http.patch(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'status': status,
-          'approvedBy': 'Admin', // In real app, get from AuthService
+          'approvedBy': 'Admin',
           'approvedAt': DateTime.now().toIso8601String(),
           if (note != null) 'note': note,
         }),
@@ -73,25 +70,63 @@ class TransactionService {
     }
   }
 
-  static Future<List<Transaction>> getTransactions({String? memberId}) async {
+  static Future<bool> updateTransaction(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     try {
-      // If backend supports filtering by memberId via query param
-      final uri = memberId != null
-          ? Uri.parse('$_baseUrl?memberId=$memberId')
-          : Uri.parse(_baseUrl);
+      final url = '$_baseUrl/$id';
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(data),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Error updating transaction: $e');
+      return false;
+    }
+  }
 
-      final response = await http.get(uri);
+  static Future<bool> deleteTransaction(String id) async {
+    try {
+      final url = '$_baseUrl/$id';
+      final response = await http.delete(Uri.parse(url));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Error deleting transaction: $e');
+      return false;
+    }
+  }
 
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        if (body is List) {
-          return body.map((t) => Transaction.fromJson(t)).toList();
-        } else if (body['data'] is List) {
-          // Handle wrapped response
-          return (body['data'] as List)
-              .map((t) => Transaction.fromJson(t))
-              .toList();
-        }
+  static Future<List<Transaction>> getTransactions({
+    String? memberId,
+    String? billNumber,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (memberId != null) queryParams['memberId'] = memberId;
+      if (billNumber != null) queryParams['billNumber'] = billNumber;
+
+      final queryString = Uri(queryParameters: queryParams).query;
+      final endpoint = queryString.isEmpty
+          ? '/transactions'
+          : '/transactions?$queryString';
+
+      final responseData = await ApiService.get(endpoint);
+
+      if (responseData != null) {
+        final List<dynamic> list = responseData is List
+            ? responseData
+            : (responseData['data'] ?? []);
+
+        // Log Data View
+        SessionService.logActivity(
+          'DATA_VIEW',
+          details: 'Fetched ${list.length} transactions',
+        );
+
+        return list.map((t) => Transaction.fromJson(t)).toList();
       }
     } catch (e) {
       debugPrint('Error fetching transactions: $e');

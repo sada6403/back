@@ -1,6 +1,0 @@
-Product: 'Aloe Vera Leaf'
-  Direct Matches: 5
-Product: 'Aloe Vera Packets'
-  Direct Matches: 1
-Product: 'Aloe Vera Plant'
-  Direct Matches: 1

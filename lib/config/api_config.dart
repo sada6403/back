@@ -3,7 +3,7 @@ class ApiConfig {
   // static String baseUrl = "http://localhost:3001/api";
   static String get rootUrl => baseUrl.replaceAll('/api', '');
 
-  static String get analysis => '$baseUrl/analysis/data';
+  static String get analysis => '$baseUrl/analysis';
   static String get health =>
       '$baseUrl/health'; // Assuming health check is at /health or similar, or just check root
 
@@ -23,16 +23,11 @@ class ApiConfig {
   static String get auditLogs => '$baseUrl/admin/audit-logs';
 
   static void setBaseUrl(String url) {
-    // FORCE MIGRATION: If the stored URL is localhost, force it to AWS
-    if (url.contains("localhost") || url.contains("127.0.0.1")) {
-      baseUrl = "http://16.16.64.104:3001/api";
+    // Remove trailing slash if present
+    if (url.endsWith('/')) {
+      baseUrl = url.substring(0, url.length - 1);
     } else {
-      // Remove trailing slash if present
-      if (url.endsWith('/')) {
-        baseUrl = url.substring(0, url.length - 1);
-      } else {
-        baseUrl = url;
-      }
+      baseUrl = url;
     }
   }
 }

@@ -20,7 +20,7 @@ const registerMember = async (req, res, next) => {
 
         // Ensure memberCode is unique if provided
         if (memberCode) {
-            const exists = await Member.findOne({ memberCode });
+            const exists = await Member.findOne({ memberId: memberCode });
             if (exists) {
                 return res.status(400).json({
                     success: false,
@@ -194,8 +194,8 @@ const getMembers = async (req, res) => {
                 $match: {
                     $or: [
                         { name: { $regex: search, $options: 'i' } },
-                        { mobile: { $regex: search, $options: 'i' } },
-                        { memberCode: { $regex: search, $options: 'i' } },
+                        { contact: { $regex: search, $options: 'i' } },
+                        { memberId: { $regex: search, $options: 'i' } },
                         { address: { $regex: search, $options: 'i' } }
                     ]
                 }
@@ -215,11 +215,13 @@ const getMembers = async (req, res) => {
                 $project: {
                     _id: 1,
                     name: 1,
-                    mobile: 1,
-                    email: 1, // Ensure email is projected
+                    contact: { $ifNull: ['$contact', '$mobile', ''] },
+                    mobile: { $ifNull: ['$contact', '$mobile', ''] }, // Alias for compatibility
+                    email: 1,
                     address: 1,
                     nic: 1,
-                    memberCode: 1,
+                    memberId: { $ifNull: ['$memberId', '$memberCode', ''] },
+                    memberCode: { $ifNull: ['$memberId', '$memberCode', ''] }, // Alias for compatibility
                     fieldVisitorId: 1,
                     fieldVisitorCode: { $arrayElemAt: ['$fieldVisitor.userId', 0] },
                     fieldVisitorName: {
@@ -236,10 +238,9 @@ const getMembers = async (req, res) => {
                     totalSellAmount: 1,
                     totalBuyQuantity: 1,
                     totalSellQuantity: 1,
-                    totalSellQuantity: 1,
                     registeredAt: 1,
-                    joinedDate: 1, // Project joinedDate
-                    registrationData: 1 // Add this to projection
+                    joinedDate: 1,
+                    registrationData: 1
                 }
             }
         ];
@@ -297,10 +298,10 @@ const updateMember = async (req, res) => {
         if (member) {
             member.name = name || member.name;
             member.address = address || member.address;
-            member.mobile = mobile || member.mobile;
+            member.contact = mobile || member.contact;
             member.email = email || member.email;
             member.nic = nic || member.nic;
-            member.memberCode = memberCode || member.memberCode;
+            member.memberId = memberCode || member.memberId;
             member.registrationData = registrationData || member.registrationData;
 
             const updatedMember = await member.save();
@@ -393,17 +394,17 @@ const importMembers = async (req, res) => {
                 // Check for existing member
                 const existing = await Member.findOne({
                     $or: [
-                        { memberCode: codeStr },
-                        { mobile: phoneStr }
+                        { memberId: codeStr },
+                        { contact: phoneStr }
                     ]
                 });
 
                 if (existing) {
                     // Update existing member if memberCode matches
-                    if (existing.memberCode === codeStr) {
+                    if (existing.memberId === codeStr) {
                         console.log(`[Import] Row ${index + 1}: Updating member ${codeStr}`); // DEBUG LOG
                         existing.name = name;
-                        existing.mobile = phoneStr;
+                        existing.contact = phoneStr;
                         existing.address = address || existing.address;
                         existing.nic = nic || existing.nic;
                         existing.email = email || existing.email;
@@ -411,13 +412,13 @@ const importMembers = async (req, res) => {
                         await existing.save();
                         updatedCount++;
                     } else {
-                        console.log(`[Import] Row ${index + 1} SKIPPED: Conflict. Code: ${codeStr}, Phone: ${phoneStr} exists as ${existing.memberCode}`); // DEBUG LOG
-                        // Phone number duplicate but different memberCode
+                        console.log(`[Import] Row ${index + 1} SKIPPED: Conflict. Code: ${codeStr}, Phone: ${phoneStr} exists as ${existing.memberId}`); // DEBUG LOG
+                        // Phone number duplicate but different memberId
                         skippedCount++;
                         skippedDetails.push({
                             rowIndex: index + 2,
                             reason: 'Phone number already used by another Member',
-                            data: { memberCode: codeStr, mobile: phoneStr, conflictId: existing.memberCode }
+                            data: { memberCode: codeStr, mobile: phoneStr, conflictId: existing.memberId }
                         });
                     }
                     continue;
@@ -456,8 +457,8 @@ const importMembers = async (req, res) => {
 
                 const newMember = new Member({
                     name,
-                    memberCode: codeStr,
-                    mobile: phoneStr,
+                    memberId: codeStr,
+                    contact: phoneStr,
                     address: address || '',
                     nic: nic || '',
                     email: email || '',

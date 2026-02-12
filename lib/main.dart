@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/login_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'config/api_config.dart';
 
 import 'services/audit_service.dart';
+import 'services/auth_service.dart';
+import 'services/session_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +14,24 @@ void main() async {
   // Load connection settings
   try {
     // Initialize services that need local storage
+    await AuthService.init(); // Restore auth state
+
+    // Check and migrate API URL if needed
+    final prefs = await SharedPreferences.getInstance();
+    String? savedUrl = prefs.getString('api_base_url');
+
+    // If the saved URL is local and code default is remote, force migration
+    if (savedUrl != null &&
+        (savedUrl.contains('localhost') || savedUrl.contains('10.0.2.2')) &&
+        !ApiConfig.baseUrl.contains('localhost')) {
+      debugPrint('Migrating from local to remote: ${ApiConfig.baseUrl}');
+      await prefs.setString('api_base_url', ApiConfig.baseUrl);
+      ApiConfig.setBaseUrl(ApiConfig.baseUrl);
+    } else if (savedUrl != null) {
+      ApiConfig.setBaseUrl(savedUrl);
+    }
+
+    await SessionService.init(); // Auto-start session if logged in
     await AuditService.init(); // Load audit logs
   } catch (e) {
     debugPrint('Failed to load config: $e');

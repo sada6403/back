@@ -1,9 +1,0 @@
-mSMS Enterprise
-Username	
-Password	
-
-
-Login	
-
-Forgot Password ?
-
