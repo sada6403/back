@@ -894,10 +894,20 @@ const getFVPerformance = async (req, res) => {
         ]);
 
         const fvs = await FieldVisitor.find({ branchId }).select('name userId').lean();
+        console.log(`[getFVPerformance] BranchResolved: ${branchId}, FVs Found: ${fvs.length}`);
+
         const fvMap = new Map();
 
         // Get members for this branch to calculate counts and details
         const members = await Member.find({ branchId }).select('name memberId contact address fieldVisitorId').lean();
+        console.log(`[getFVPerformance] Members Found: ${members.length}`);
+        if (members.length > 0) {
+            console.log(`[getFVPerformance] Sample Member FV ID: ${members[0].fieldVisitorId} (Type: ${typeof members[0].fieldVisitorId})`);
+        }
+        if (fvs.length > 0) {
+            console.log(`[getFVPerformance] Sample FV ID: ${fvs[0]._id} (Type: ${typeof fvs[0]._id})`);
+        }
+
         const fvMembersMap = new Map();
 
         members.forEach(m => {
