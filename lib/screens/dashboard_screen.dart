@@ -471,9 +471,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      height: 90,
-                      child: _MiniLineChart.points(memberSeries),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SizedBox(
+                        height: 90,
+                        width: double.infinity,
+                        child: _MiniLineChart.points(memberSeries),
+                      ),
                     ),
                   ],
                 ),
@@ -542,9 +546,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      height: 90,
-                      child: _MiniLineChart.points(employeeSeries),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SizedBox(
+                        height: 90,
+                        width: double.infinity,
+                        child: _MiniLineChart.points(employeeSeries),
+                      ),
                     ),
                   ],
                 ),
@@ -679,15 +687,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.blueGrey),
-            tooltip: 'Database Settings',
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
-            },
-          ),
+          if (AuthService.role != 'analyzer')
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.blueGrey),
+              tooltip: 'Database Settings',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              },
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
             child: IconButton(
@@ -832,12 +841,13 @@ class AppDrawer extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const BulkMessageScreen()),
               ),
             ),
-          _buildDrawerItem(
-            text: 'Analysis',
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const AnalysisPage())),
-          ),
+          if (AuthService.role != 'analyzer')
+            _buildDrawerItem(
+              text: 'Analysis',
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const AnalysisPage())),
+            ),
           _buildDrawerItem(
             text: 'User Monitoring',
             onTap: () => Navigator.of(context).push(
@@ -926,7 +936,7 @@ class _MiniPainter extends CustomPainter {
       } else {
         pathA.lineTo(x, y);
       }
-      canvas.drawCircle(Offset(x, y), 1.5, dot);
+      canvas.drawCircle(Offset(x, y), 2.0, dot); // Slightly larger dots
     }
     canvas.drawPath(pathA, paintA);
 

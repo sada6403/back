@@ -8,7 +8,7 @@ class ApiService {
   static String get baseUrl => ApiConfig.baseUrl;
 
   // Helper to get headers with token
-  static Future<Map<String, String>> _getHeaders() async {
+  static Future<Map<String, String>> getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
     final headers = {"Content-Type": "application/json"};
@@ -20,7 +20,7 @@ class ApiService {
 
   // Generic helper for GET requests
   static Future<dynamic> get(String endpoint) async {
-    final headers = await _getHeaders();
+    final headers = await getHeaders();
     final response = await http.get(
       Uri.parse('$baseUrl$endpoint'),
       headers: headers,
@@ -33,7 +33,7 @@ class ApiService {
     String endpoint,
     Map<String, dynamic> data,
   ) async {
-    final headers = await _getHeaders();
+    final headers = await getHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl$endpoint'),
       headers: headers,

@@ -202,6 +202,7 @@ class _MonitoringDashboardState extends State<MonitoringDashboard> {
             DataColumn(label: Text('Name')),
             DataColumn(label: Text('Role')),
             DataColumn(label: Text('Branch')),
+            DataColumn(label: Text('Activity')),
             DataColumn(label: Text('Status')),
             DataColumn(label: Text('Last Seen')),
             DataColumn(label: Text('Device')),
@@ -214,6 +215,15 @@ class _MonitoringDashboardState extends State<MonitoringDashboard> {
                 DataCell(Text(user['username'] ?? user['userId'] ?? 'N/A')),
                 DataCell(Text(user['role'] ?? 'N/A')),
                 DataCell(Text(user['branchName'] ?? 'N/A')),
+                DataCell(
+                  Text(
+                    user['currentScreen'] ?? 'Home',
+                    style: const TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                ),
                 DataCell(
                   Container(
                     padding: const EdgeInsets.symmetric(

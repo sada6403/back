@@ -1,0 +1,21 @@
+--- Emulating Controller Logic ---
+Input branchId: 'Kalmunai'
+Resolved branchId: 'BR-KM-001'
+FVs Found: 15
+Members Found: 617
+Map Size: 15
+FV: Rasarathinam Sutharsini (697838232f5c5781b4bc276e) -> MemberCount: 39
+FV: Puththisigamani Rathy (6979871c2f5c5781b4bc284c) -> MemberCount: 43
+FV: vijayasingam vijayandran (6979ac032f5c5781b4bc28e8) -> MemberCount: 94
+FV: Yogarajah vathana (6979c57a2f5c5781b4bc295d) -> MemberCount: 41
+FV: Shanmuga Shanthakumary (6979ecd92f5c5781b4bc29b6) -> MemberCount: 24
+FV: Krishnan pavithra (697ad6a62f5c5781b4bc29f3) -> MemberCount: 33
+FV: Tharmalingam manoja (697ada262f5c5781b4bc2a0d) -> MemberCount: 38
+FV: Vadivel Vimala (697ae93c2f5c5781b4bc2a9d) -> MemberCount: 49
+FV: Mohanathas Ramshayini (697af1de2f5c5781b4bc2afd) -> MemberCount: 39
+FV: Konesamoorththy Nirojiny (697c2930691bb77e5748ec7a) -> MemberCount: 74
+FV: Chanthirasekaram nakulaswaran (697c32ea75df7e8fd7c9c22b) -> MemberCount: 48
+FV: Thampiyan Nanthini (697d85f2153ece9a1ea17b3e) -> MemberCount: 41
+FV: Suntharalingam Suthan (69841647dea266141468bf68) -> MemberCount: 39
+FV: Mahanthiran Kirushneswary (69858b5dd20caad042026bd2) -> MemberCount: 9
+FV: Dilakshan Dishanthini (69898b55d20caad04202aab8) -> MemberCount: 6

@@ -23,6 +23,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   bool _isDownloading = false;
+  String _selectedRole = 'it_sector';
 
   @override
   void initState() {
@@ -37,7 +38,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     });
     try {
       final data = await AnalysisService.getAnalysisData(
-        role: 'it_sector',
+        role: _selectedRole,
         userId: _selectedUserId,
         startDate: _startDate,
         endDate: _endDate,
@@ -125,6 +126,7 @@ class _AnalysisPageState extends State<AnalysisPage> {
     setState(() => _isDownloading = true);
     try {
       final reportUrl = await AnalysisService.downloadAnalysisReport(
+        role: _selectedRole,
         userId: _selectedUserId,
         startDate: _startDate,
         endDate: _endDate,
@@ -187,7 +189,9 @@ class _AnalysisPageState extends State<AnalysisPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'IT Sector Analysis',
+                _selectedRole == 'it_sector'
+                    ? 'IT Sector Analysis'
+                    : 'Analyzer Activity Analysis',
                 style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
               ),
               if (AuthService.role == 'analyzer')
@@ -206,6 +210,23 @@ class _AnalysisPageState extends State<AnalysisPage> {
               icon: const Icon(Icons.calendar_month),
               onPressed: _showMonthPicker,
               tooltip: 'Select Month',
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.filter_list),
+              tooltip: 'Filter by Role',
+              onSelected: (value) {
+                setState(() {
+                  _selectedRole = value;
+                });
+                _loadData();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'it_sector',
+                  child: Text('IT Sector'),
+                ),
+                const PopupMenuItem(value: 'analyzer', child: Text('Analyzer')),
+              ],
             ),
             IconButton(
               icon: _isDownloading

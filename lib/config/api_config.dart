@@ -1,5 +1,6 @@
 class ApiConfig {
-  static String baseUrl = "http://16.16.64.104:3001/api";
+  static String baseUrl = 'http://16.16.64.104:3001/api';
+  // static const String baseUrl = 'http://localhost:3001/api';
   // static String baseUrl = "http://localhost:3001/api";
   static String get rootUrl => baseUrl.replaceAll('/api', '');
 
