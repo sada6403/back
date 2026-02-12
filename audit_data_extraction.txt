@@ -1,0 +1,41 @@
+﻿Connected to MongoDB
+Searching activitylogs for Employee details...
+
+Match for kalaivany in activity:
+{
+  "_id": "6981cb09cc9885a7eb0a2fd9",
+  "userId": "DEV-IT-2004",
+  "username": "Canisius bede lavapperiyan",
+  "role": "admin",
+  "action": "Employee Updated",
+  "details": "Updated Employee: SRIKANTHAN KALAIVANY (Inline)",
+  "target": "SRIKANTHAN KALAIVANY",
+  "timestamp": "2026-02-03T10:16:41.871Z",
+  "__v": 0
+}
+
+Match for kalaivany in activity:
+{
+  "_id": "6981cb0ccc9885a7eb0a2fe5",
+  "userId": "DEV-IT-2004",
+  "username": "Canisius bede lavapperiyan",
+  "role": "admin",
+  "action": "Employee Updated",
+  "details": "Updated Employee: SRIKANTHAN KALAIVANY (Inline)",
+  "target": "SRIKANTHAN KALAIVANY",
+  "timestamp": "2026-02-03T10:16:44.591Z",
+  "__v": 0
+}
+
+Match for Sakila in activity:
+{
+  "_id": "698ae5d5ad9dd41ade88c047",
+  "userId": "DEV-IT-1108",
+  "username": "Kulendradas sabiharan",
+  "role": "admin",
+  "action": "Employee Updated",
+  "details": "Updated Employee: Thevalingam Sakila (Inline)",
+  "target": "Thevalingam Sakila",
+  "timestamp": "2026-02-10T08:01:25.982Z",
+  "__v": 0
+}

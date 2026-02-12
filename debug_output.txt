@@ -1,0 +1,8 @@
+Total Members in DB: 843
+Members with MISSING memberId: 843
+--- Sample 5 Missing IDs ---
+ID: 697aded12f5c5781b4bc2a5f, Name: K.Pavithra, Contact: undefined, Current memberId: [undefined]
+ID: 697aec5f2f5c5781b4bc2ab5, Name: K. vimala, Contact: undefined, Current memberId: [undefined]
+ID: 697af6bf2f5c5781b4bc2b3e, Name: Mohanathas yogeshwary, Contact: undefined, Current memberId: [undefined]
+ID: 697c2f1d75df7e8fd7c9c1bd, Name: Vellakuddy.Kamala, Contact: undefined, Current memberId: [undefined]
+ID: 697c30db75df7e8fd7c9c1f2, Name: சண்முகம் சாந்தகுமாரி, Contact: undefined, Current memberId: [undefined]

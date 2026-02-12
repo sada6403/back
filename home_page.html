@@ -1,0 +1,931 @@
+
+<!DOCTYPE html>
+<html>
+    <title>mSMS Login</title> 
+	
+    <head>
+	    <!-- start: Meta -->
+	    <meta charset="utf-8">
+        <title>mSMS</title>
+	    <meta name="apple-mobile-web-app-capable" content="yes"/>
+	    <meta name="description" content="mSMS">
+	    <meta name="author" content="Mobitel">
+	    <!-- end: Meta -->
+	
+	    <!-- start: Mobile Specific -->
+	    <meta name="viewport" content="width=device-width, initial-scale=1">
+	    <!-- end: Mobile Specific -->
+		
+		<link rel="shortcut icon" href="#" />
+		
+     	<link 	rel="stylesheet" type="text/css" href="/assets/css/default/easyui.css"/>
+		<link 	rel="stylesheet" type="text/css" href="/assets/css/icon.css"/>
+		<script type="text/javascript" src="/assets/js/scripts/jquery-1.8.0.min.js"/></script>
+		<script type="text/javascript" src="/assets/js/scripts/jquery.easyui.min.js"/></script>
+        
+	</head>
+
+    <script type="text/javascript">
+	
+		$(document).ready(function()
+		{
+	
+		});
+	
+		function countDown(difference)
+		{
+			var identity = setInterval(scene, 1);
+			function scene() 
+			{
+				
+				if (difference < 1) 
+				{
+					
+					clearInterval(identity);
+					document.getElementById("login_counter").style.display = 'none';
+
+				} 
+				else 
+				{
+					  var minutes = Math.floor(difference / 60);
+					  var seconds = Math.floor(((difference / 60)-minutes) *60) ;
+						
+					  // Output the result in an element with id="demo"
+					  document.getElementById("login_counter").innerHTML =  minutes + "m " + seconds + "s ";
+				}
+			}
+		}
+
+		function user_login()
+		{			
+			document.getElementById("uname_login_validation").style.display = 'none';
+			
+			var username = $("#txt_username").val();
+			var password = $("#txt_password").val();
+			
+			if(username == "")
+			{
+				document.getElementById("uname_login_validation").textContent = "Username Required";
+				document.getElementById("uname_login_validation").style.display = 'block';
+				return;
+			}
+			else if(password == "")
+			{
+				document.getElementById("uname_login_validation").textContent = "Password required";
+				document.getElementById("uname_login_validation").style.display = 'block';
+				return;
+			}
+			else
+			{
+				$.post('/index.php/login/verifyLogin',{"username":username,"password":password},function(response)
+				{
+					//alert(response);
+					var data = jQuery.parseJSON(response);
+						   
+					if(data["status"] == "ACCOUNT LOCKED")
+					{
+						var lockDate = data["lockDate"];
+						
+						document.getElementById('txt_username').readOnly = true;
+						document.getElementById('txt_password').readOnly = true;
+						document.getElementById("login_button").disabled = true;
+						
+						document.getElementById("uname_login_validation").textContent = 'Login is locked';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						
+						document.getElementById("login_counter").style.display = 'block';
+						
+						var deadline = new Date(lockDate);
+						deadline.setMinutes( deadline.getMinutes() + 20);
+						
+						var x = setInterval(function() 
+						{
+							var now = new Date().getTime();
+							var t = deadline - now;
+							
+							var minutes = Math.floor((t % (1000 * 60 * 60)) / (1000 * 60));
+							var seconds = Math.floor((t % (1000 * 60)) / 1000);
+							
+							document.getElementById("login_counter").innerHTML = "Remaining time: " + minutes + "m " + seconds + "s ";
+								
+							if (t < 0) 
+							{
+								clearInterval(x);
+								document.getElementById("login_counter").innerHTML = "Try again to login";
+								document.getElementById("uname_login_validation").style.display = 'none';
+								document.getElementById('txt_username').value = "";
+								document.getElementById('txt_password').value = "";
+								
+								document.getElementById('txt_username').readOnly = false;
+								document.getElementById('txt_password').readOnly = false;
+								document.getElementById("login_button").disabled = false;
+								
+							}
+								
+						}, 1000);
+						
+					}
+					else if(data["status"] == "INVALID CREDENTIALS")
+					{
+						document.getElementById("uname_login_validation").textContent = 'Invalid Credentials';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return;  
+					}
+					else if(data["status"] == "SUBUSER INACTIVE")
+					{
+						document.getElementById("uname_login_validation").textContent = 'User is deactivated';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return; 
+					}
+					else if(data["status"] == "INACTIVE")
+					{
+						document.getElementById("uname_login_validation").textContent = 'Account is deactivated';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return;  
+					}
+					else if(data["status"] == "ACCOUNT HALTED")
+					{
+						document.getElementById("uname_login_validation").textContent = 'Account is temporarily halted';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return;  
+					}
+					else if(data["status"] == "WEBUI ACCESS DENIED")
+					{	
+						document.getElementById("uname_login_validation").textContent = 'Access denied for web';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return;		   
+					}
+					else if(data["status"] == "FORCE PW RESET")
+					{
+						popUp_Force_Password_Reset();
+					}
+					else if(data["status"] == "TEST USER EXPIRED")
+					{
+						document.getElementById("uname_login_validation").textContent = 'Login expired';
+						document.getElementById("uname_login_validation").style.display = 'block';
+						return;
+					}
+					else if(data["status"] == "NO CONTACT NUMBER")
+					{
+						document.getElementById("login_form").reset();
+						$.messager.alert("ERROR","Unable to send OTP. Customer contact not updated at backend !");
+					}
+					else if(data["status"] == "INVALID CONTACT")
+					{
+						document.getElementById("login_form").reset();					
+						$.messager.alert("ERROR","Registered contact number is Invalid!");
+					}
+					else if(data["status"] == "LOGIN OTP SENT")
+					{
+						popUp_Login_OTP();
+						$.messager.alert("SUCCESS","OTP was sent to registered customer contact number! OTP is valid only for next 2 minutes.");
+					}
+					else if(data["status"] == "GO AHEAD")
+					{	
+						location.href="/index.php/home";															
+					}
+							 
+				});
+			}
+			
+		}
+		
+		function Validate_Login_OTP()
+		{	
+			document.getElementById("otp_login_validation").style.display = 'none';
+			
+			if($('#txt_otp_login').val() == "")
+			{
+				document.getElementById("otp_login_validation").textContent = "OTP required";
+				document.getElementById("otp_login_validation").style.display = 'block';				
+				return;				
+			}
+			else
+			{
+				var args = {"otp":$('#txt_otp_login').val()};
+						   
+				$.post('/index.php/login/validateLoginOTP',args,function(response)
+				{
+					var data = jQuery.parseJSON(response);
+
+					if(data["status"] == "INVALID OTP")
+					{
+						document.getElementById("otp_login_validation").textContent = "Invalid OTP";
+						document.getElementById("otp_login_validation").style.display = 'block';
+						return;	
+					}
+					else if(data["status"] == "ACCOUNT LOCKED")
+					{
+						document.getElementById("otp_login_validation").textContent = "Attempts Exceeded!";
+						document.getElementById("otp_login_validation").style.display = 'block';
+						
+						document.getElementById('txt_otp_login').readOnly = true;
+						document.getElementById("button_otp").disabled = true;
+						
+						return;	
+					}
+					else if(data["status"] == "SESSION_EXPIRED")
+					{	
+						document.getElementById("otp_login_validation").textContent = "OTP is expired";
+						document.getElementById("otp_login_validation").style.display = 'block';
+						document.getElementById('txt_otp').value="";
+						return;
+					}
+					else if(data["status"] == "OTP VALIDATED")
+					{
+						//alert(response);
+						$('#dlg_login_otp').dialog('close')	;								
+						$.messager.alert("SUCCESS","OTP Verified!");
+		
+						location.href="/index.php/home";
+					}
+					else
+					{
+						//alert(response);
+						document.getElementById('txt_username').value = "";
+						document.getElementById('txt_password').value = "";
+
+						$('#dlg_login_otp').dialog('close')	;								
+						$.messager.alert("Alert","Access Denied!");	
+					}
+
+				}); 
+			
+			}	
+		}
+		
+		function Send_PWReset_Otp()
+		{			
+			document.getElementById("uname_validation").style.display = 'none';
+			
+			//alert($('#txt_otp').val());
+
+			document.getElementById("otp_label").style.display = 'none';
+			document.getElementById("txt_otp").style.display = 'none';
+			document.getElementById('txt_otp').value = "";
+			document.getElementById("button_otp").style.display = 'none';
+			document.getElementById('txt_otp').readOnly = false;
+
+			document.getElementById("otp_validation").style.display = 'none';
+						
+			var API_select = document.getElementById("selectAPI").checked;
+			var WEB_select = document.getElementById("selectWeb").checked;
+			
+			console.log("API: " + API_select);
+			console.log("WEB: " + WEB_select);
+			
+			if(API_select == false && WEB_select == false)
+			{										
+				$.messager.alert("ERROR","Please select required option OR options to reset the password !");	
+				//document.getElementById("uname_validation").textContent = "Select required option(s) to reset the password!";
+				//document.getElementById("uname_validation").style.display = 'block';
+				return;	
+			}
+			else if($('#txt_reset_username').val() == "")
+			{
+				document.getElementById("uname_validation").textContent = "Username required";
+				document.getElementById("uname_validation").style.display = 'block';				
+				return;				
+			}
+			else
+			{	
+				$.post('/index.php/login/verifyPWReset',{"username":$("#txt_reset_username").val()},function(response)
+				{
+					var data = jQuery.parseJSON(response);
+										
+					if(data["status"] == "INVALID CREDENTIALS")
+					{
+						document.getElementById("uname_validation").textContent = "Invalid Username";
+						document.getElementById("uname_validation").style.display = 'block';				
+						return;  
+					}
+					else if(data["status"] == "SUBUSER INACTIVE")
+					{
+						document.getElementById("uname_validation").textContent = "User is deactivated";
+						document.getElementById("uname_validation").style.display = 'block';
+						return; 
+					}
+					else if(data["status"] == "INACTIVE")
+					{
+						document.getElementById("uname_validation").textContent = "User is deactivated";
+						document.getElementById("uname_validation").style.display = 'block';
+						return;  
+					}
+					else if(data["status"] == "ACCOUNT HALTED")
+					{
+						document.getElementById("uname_validation").textContent = "This account is temporarily halted";
+						document.getElementById("uname_validation").style.display = 'block';
+						return;  
+					}
+					else if(data["status"] == "WEBUI ACCESS DENIED")
+					{	
+						document.getElementById("uname_validation").textContent = "Access denied for web";
+						document.getElementById("uname_validation").style.display = 'block';
+						return;		   
+					}
+					else if(data["status"] == "TEST USER EXPIRED")
+					{
+						document.getElementById("uname_validation").textContent = "User is deactivated";
+						document.getElementById("uname_validation").style.display = 'block';
+						return;
+					}
+					else if(data["status"] == "NO CONTACT NUMBER")
+					{
+						document.getElementById("login_form").reset();
+						$.messager.alert("ERROR","Unable to send OTP. Customer contact not updated at backend !");
+					}
+					else if(data["status"] == "INVALID CONTACT")
+					{
+						document.getElementById("login_form").reset();					
+						$.messager.alert("ERROR","The registered contact number is invalid!");
+					}
+					else if(data["status"] == "ACCOUNT LOCKED")
+					{
+						document.getElementById("selectAPI").disabled = true;
+						document.getElementById("selectWeb").disabled = true;
+						document.getElementById('txt_reset_username').readOnly = true;
+						document.getElementById('button_otp').disabled = true;
+						document.getElementById("btn_reset_username").disabled = true;
+					
+						$.messager.alert("ERROR","Attempts Exceeded. Password reset is locked for 20 min!");	
+						
+						//document.getElementById("uname_validation").textContent = "Attempts Exceeded. Password reset is locked for 20 min!";
+						//document.getElementById("uname_validation").style.display = 'block';
+						
+					}
+					else if(data["status"] == "OTP SENT")
+					{
+						document.getElementById("selectAPI").disabled = true;
+						document.getElementById("selectWeb").disabled = true;
+						document.getElementById('txt_reset_username').readOnly = true;
+						document.getElementById("otp_label").style.display = 'block';
+						document.getElementById("txt_otp").style.display = 'block';
+						document.getElementById("button_otp").style.display = 'block';				
+
+						$.messager.alert("SUCCESS","OTP was sent to registered customer contact number! OTP is valid only for next 2 minutes.");						   
+						
+					}
+					else
+					{
+						$('#dlg_password_reset').dialog('close');								
+						$.messager.alert("Alert","Access Denied!");    
+					}
+			
+				});
+			}
+			
+		}
+		
+		function ValidatePWResetOTP()
+		{	
+			document.getElementById("otp_validation").style.display = 'none'; 
+		
+			if($('#txt_otp').val() == "")
+			{
+				document.getElementById("otp_validation").textContent = "OTP is required";
+				document.getElementById("otp_validation").style.display = 'block';				
+				return;				
+			}
+			else
+			{
+				var args = {"otp":$('#txt_otp').val()};
+						   
+				$.post('/index.php/login/validatePwResetOtp',args,function(response)
+				{
+					var data = jQuery.parseJSON(response);
+					
+					if(data["status"] == "INVALID OTP")
+					{
+						document.getElementById("otp_validation").textContent = "OTP doesn't match!";
+						document.getElementById("otp_validation").style.display = 'block';
+						return;	
+					}
+					else if(data["status"] == "ACCOUNT LOCKED")
+					{
+						document.getElementById("otp_validation").textContent = "Attempts Exceeded!";
+						document.getElementById("otp_validation").style.display = 'block';
+						
+						document.getElementById('txt_otp').readOnly = true;
+						document.getElementById("button_otp").disabled = true;
+						document.getElementById("btn_reset_username").disabled = true;
+						
+						return;
+
+					}
+					else if(data["status"] == "SESSION_EXPIRED")
+					{	
+						document.getElementById("otp_validation").textContent = "OTP has expired";
+						document.getElementById("otp_validation").style.display = 'block';
+						document.getElementById('txt_otp').value = "";
+						return;
+					}
+					else if(data["status"] == "OTP VALIDATED")
+					{
+						//hide username elements
+						document.getElementById("lbl_reset_username").style.display = 'none';
+						document.getElementById('txt_reset_username').value = "";
+						document.getElementById("txt_reset_username").style.display = 'none';
+						document.getElementById("btn_reset_username").style.display = 'none';
+						
+						//hide otp elements
+						document.getElementById("otp_label").style.display = 'none';
+						document.getElementById("txt_otp").style.display = 'none';
+						document.getElementById('txt_otp').value = "";
+						document.getElementById("button_otp").style.display = 'none';
+													
+						$.messager.alert("SUCCESS","OTP Verified! Now you can change your password");
+		
+						document.getElementById("dlg_password_reset_main").style.display = 'block';
+						return;
+					}
+					else
+					{
+						$('#dlg_password_reset').dialog('close');								
+						$.messager.alert("Alert","Access Denied!");
+					}
+
+				}); 
+			
+			}	
+		}
+		
+		function Reset_Password()
+		{
+			document.getElementById("password_validation").textContent  = "";
+			document.getElementById("password_validation").style.display = 'none';
+			
+			//document.getElementById("password_policy").textContent  = "";
+			document.getElementById("password_policy").innerHTML  = "";
+			document.getElementById("password_policy").style.display = 'none';
+			
+			document.getElementById("confirm_password_validation").textContent  = "";
+			document.getElementById("confirm_password_validation").style.display = 'none';
+			
+			var API_select = document.getElementById("selectAPI").checked;
+			var WEB_select = document.getElementById("selectWeb").checked;
+			
+			var password = document.getElementById('txt_new_pw').value;
+			var confirmPassword = document.getElementById('txt_new_pw_confirm').value;
+			
+			var passw = /(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[\W]).{12,20}/;
+
+			if(API_select == false && WEB_select == false)
+			{	
+				$.messager.alert("ERROR","Please select a module !");	
+			}
+			else if(password == "" || password.trim() == "")
+			{
+				document.getElementById("password_validation").textContent = "Password is required";
+				document.getElementById("password_validation").style.display = 'block';
+				return;	
+				
+			}
+			else if(!password.match(passw))
+			{
+				document.getElementById("password_policy").innerHTML  = 	"Minimum one especial character required<br>"+
+																			"Minimum one numerical character required<br>"+
+																			"Uppercase and lowercase characters required<br>"+
+																			"12-20 characters required";
+																			
+				document.getElementById("password_policy").style.display = 'block';
+				return;				
+			}
+			else if(password.length < 12)
+			{
+				document.getElementById("password_policy").innerHTML = "12-20 characters required";
+				document.getElementById("password_policy").style.display = 'block';
+				return;				
+			}
+			else if(password.length > 20)
+			{
+				document.getElementById("password_policy").innerHTML = "12-20 characters required";
+				document.getElementById("password_policy").style.display = 'block';
+				return;				
+			}
+			else if(password.indexOf(' ') > -1)
+			{
+				document.getElementById("password_validation").textContent = "Spaces not allowed";
+				document.getElementById("password_validation").style.display = 'block';
+				return;				
+			}
+			else if(confirmPassword == "" || confirmPassword.trim() == "")
+			{
+				document.getElementById("confirm_password_validation").textContent = "Password confirmation required";
+				document.getElementById("confirm_password_validation").style.display = 'block';
+				return;				
+			}
+			else if(password != confirmPassword)
+			{
+				document.getElementById("confirm_password_validation").textContent = "Passwords not matching";
+				document.getElementById("confirm_password_validation").style.display = 'block';
+				return;				
+			}
+			else
+			{
+				var args = {"password":password,"apiSelect":API_select,"webSelect":WEB_select};
+						   
+				$.post('/index.php/login/resetPassword',args,function(response)
+				{
+					var data = jQuery.parseJSON(response);
+								
+					if(data["status"] == "SUCCESS")
+					{
+						$.messager.alert("SUCCESS","You have successfully reset the password! Please login with new password");
+						document.getElementById("dlg_password_reset_main").style.display = 'none';
+
+						$('#dlg_password_reset').dialog('close');      // close the dialog  
+													
+						return;
+									
+					}
+					else if(data["status"] == "TIMEOUT")
+					{
+						$.messager.alert("ERROR","You have been idle for a long time. Please try again");
+						document.getElementById("dlg_password_reset_main").style.display = 'none';
+
+						$('#dlg_password_reset').dialog('close');      // close the dialog 
+						return;
+									
+					}
+					else if(data["status"] == "FAILED")
+					{
+						$.messager.alert("ERROR","Password Reset Failed");
+						document.getElementById("dlg_password_reset_main").style.display = 'none';
+
+						$('#dlg_password_reset').dialog('close');      // close the dialog 
+						return;
+									
+					}
+					else if(data["status"] == "ACCESS DENIED")
+					{
+						$.messager.alert("ERROR","Access Denied");
+						document.getElementById("dlg_password_reset_main").style.display = 'none';
+
+						$('#dlg_password_reset').dialog('close');      // close the dialog 
+						return;
+									
+					}					
+					else
+					{
+						$.messager.alert("ERROR","ERROR!!");
+						return;
+					}
+								
+				});
+				
+				
+			}
+
+		
+		}	
+		
+		function enter(e)
+		{
+			console.log(e.keyCode);
+			
+			if(e.keyCode == 13)
+			{
+				//login();
+				user_login();
+			}
+		}
+		
+		//////////////////////////////////////////pw reset//////////////////////////////////////////////////////////////////////////////////////////
+		
+		function Toggle_Password() 
+		{
+			const togglePassword = document.querySelector('#togglePassword');
+	 
+			var x = document.getElementById("txt_new_pw");
+			//alert(x.type);
+			
+			if (x.type === "password") 
+			{
+				x.type = "text";
+			} 
+			else 
+			{
+				x.type = "password";
+			}
+					
+			// Toggle the eye and bi-eye icon
+			togglePassword.classList.toggle('bi-eye');
+		}
+		
+		function Toggle_Password_Confirm() 
+		{
+			const togglePasswordConfirm = document.querySelector('#togglePasswordConfirm');
+	  	
+			var x = document.getElementById("txt_new_pw_confirm");
+			//alert(x.type);
+			
+			if (x.type === "password") 
+			{
+				x.type = "text";
+			} 
+			else 
+			{
+				x.type = "password";
+			}
+					
+			// Toggle the eye and bi-eye icon
+			togglePasswordConfirm.classList.toggle('bi-eye');
+		}
+			
+		function popUp_Password_Reset()
+		{	
+			document.getElementById("selectAPI").checked=false;
+			document.getElementById("selectWeb").checked=false;
+			
+			document.getElementById("selectAPI").disabled=false;
+			document.getElementById("selectWeb").disabled=false;
+			
+			document.getElementById("reset_password1").reset();
+			document.getElementById("lbl_reset_username").style.display = 'block';
+			document.getElementById('txt_reset_username').readOnly = false;
+			document.getElementById("txt_reset_username").style.display = 'block';
+			document.getElementById("btn_reset_username").style.display = 'block';
+			
+			$( 'a.panel-tool-close' ).remove();
+			
+			$('#dlg_password_reset').dialog('open').dialog('setTitle',' Password Reset');  	
+		 	
+		}
+		
+		function popUp_Force_Password_Reset()
+		{	
+			document.getElementById("reset_password1").reset();
+			document.getElementById("lbl_reset_username").style.display = 'block';
+			document.getElementById('txt_reset_username').readOnly = false;
+			document.getElementById("txt_reset_username").style.display = 'block';
+			document.getElementById("btn_reset_username").style.display = 'block';
+
+			$( 'a.panel-tool-close' ).remove();
+			
+			$('#dlg_password_reset').dialog('open').dialog('setTitle','Force Password Reset');  	
+		 	
+		}
+		
+		function popUp_Login_OTP()
+		{	
+			document.getElementById("login_otp_form").reset();
+			document.getElementById("otp_login_validation").textContent  = "";
+
+			$( 'a.panel-tool-close' ).remove();
+			
+			$('#dlg_login_otp').dialog('open').dialog('setTitle','LOGIN OTP');  	
+		 	
+		}
+		
+		function popUp_Password_Policy()
+		{
+			document.getElementById("password_policy").innerHTML  = "Minimum one especial character required<br>"+
+																	"Minimum one numerical character required<br>"+
+																	"Uppercase and lowercase characters required<br>"+
+																	"12-20 characters required";
+																			
+			document.getElementById("password_policy").style.display = 'block';
+		}
+			
+	</script>
+    
+	<body style="background: #eee; font-family: arial;">
+
+		<div style="height: 90px; background-color: #0061A0; margin: -8px; margin-bottom: 8px;">
+ 
+	<img src="http://msmsenterprise.mobitel.lk/assets/images/app/slt-mobitel-logo-bluebg.jpg" align="left" style="height: 60px; margin: 10px;">
+	<img src="http://msmsenterprise.mobitel.lk/assets/images/app/header_logo_mbs.jpg" align="right" style="margin: 20px;">
+	<div style="color: white; font-size:32px; padding: 28px 200px; font-family: arial;">mSMS Enterprise</div>
+	
+</div>        
+				
+		<div align="center" style="margin-top: 100px;">
+			<table style="width: 50%; color: #416AA0">
+				<tr>
+					<td width="60%">
+						<form id="login_form" method="post" novalidate enctype="multipart/form-data">
+
+							<table align="center" style="">
+								<tr>
+									<td>Username</td>
+									<td><input id="txt_username" type="text" style="height: 25px;"/></td> 
+
+								</tr>
+								<tr>
+									<td>Password</td>
+									<td><input id="txt_password" type="password" style="height: 25px;" onkeypress="enter(event)"/></td>
+								</tr>
+								<tr></tr>
+								<tr></tr>
+								<tr>
+									<td>
+										<button type="button" id="login_button" onclick="javascript:user_login()" style="color: white; background: #0061A0; padding: 5px; width: 100px;">Login</a>
+									</td>
+									<td>
+										<div id="uname_login_validation" style="color: red; display: none"></div>										
+									</td>
+								</tr>
+								<tr>
+									<td>
+									<br>
+										<a data-toggle="modal" href="javascript:popUp_Password_Reset()" style="color:#01afe6">Forgot Password ?</a>
+									</td>
+									
+								</tr>
+								<tr>
+									<td>
+									<br>			
+										<div id="login_counter" style="color: red; display: none"></div>
+									
+									</td>								
+								</tr>
+							</table>
+						</form>
+					</td>
+				</tr>
+				
+			</table>
+		</div>
+		
+		<div id="dlg_password_reset" class="easyui-dialog" title="Password Reset" style="padding:20px;width:450px" closed="true"  data-options="resizable:true,modal:true" buttons="#dlg_password_reset_buttons">  
+        
+			<form id="reset_password1" method="post" novalidate enctype="multipart/form-data">  
+
+				<div id="dlg_password_reset_init">
+					<div class="row">
+						<div class="col-md-3"></div>
+						<div class="col-md-6">
+							<fieldset style="text-align: center;"><br>
+								<legend>Select the option for password reset:</legend>
+								
+								<label class="container" style="margin-right: 30px;">
+									<input type="checkbox" id="selectAPI">
+									<span class="checkmark"></span>API
+								</label>
+								<label class="container">
+									<input type="checkbox" id="selectWeb">
+									<span class="checkmark"></span>Web Portal
+								</label>
+							</fieldset>
+						</div>
+						<div class="col-md-3"></div>
+						<br>
+					</div>
+					<div class="row">
+						<table style="width: 100%;">
+							<tr>
+								<td>
+									<label id="lbl_reset_username" style="padding-top: 10px;">Username:</label> 
+								</td>
+								<td>
+									<input id="txt_reset_username" name="txt_reset_username" class="easyui" required="true" style="width: 160px;">  
+								</td>
+								<td>
+									<!--<a href="javascript:void(0)" id="btn_reset_username" class="easyui-linkbutton"  onclick="Send_PWReset_Otp()" style="height: 20px;width: 100%;padding-top:5px;" ></a>-->  
+									<button type="button" id="btn_reset_username" onclick="javascript:Send_PWReset_Otp()" style="background-color:#1a7bc9;width:100%;color:white;border-width: 0px;padding:5px;display:none;">Send OTP</button>
+									
+								</td>
+							</tr>
+							
+							<tr >
+								<td></td>
+								<td>
+									<div id="uname_validation" style="font-size: 12px; color: red; display: none"><br></div>
+								</td>
+								<td></td>	
+							</tr>
+									
+							<tr id="otp_block" >
+								<td>
+									<label id="otp_label" style="display:none;padding-top:10px;">Enter OTP:</label> 
+								</td>
+								<td>
+									<input id="txt_otp" style="display:none;width:160px;" name="txt_otp"  required="true">  
+									<input id="txt_hidden" style="display:none;" name="txt_hidden"  type="hidden">  
+								</td>
+								<td>
+									<button type="button" id="button_otp" onclick="javascript:ValidatePWResetOTP()" style="background-color:#1a7bc9;width:100%;color:white;border-width: 0px;padding:5px;display:none;">Confirm</button>
+									
+								</td>
+							</tr>
+							<tr >
+								<td></td>
+								<td>
+									<div id="otp_validation" style="font-size: 12px;color: red;display:none"></div>										
+								</td>
+								<td></td>
+							</tr>
+								
+							<tr></tr>
+						</table>
+					</div>
+				</div>
+				<div id="dlg_password_reset_main"  style="width:auto;padding:3px;display:none">
+					<table>
+						<tr id="password_block">
+							<td>
+								<label style="padding-top:10px;" >New Password:</label> 
+							</td>
+							<td>
+								<input id="txt_new_pw" name="txt_new_pw"  type="password" class="easyui" required="true" style="width: 175px;"/>
+							</td>
+							<td>
+							</td>
+						</tr>
+						<tr >
+							<td></td>
+							<td>
+								<div id="password_validation" style="font-size: 12px;color: red;display:none"></div>
+							</td>
+							<td></td>
+						</tr>	
+						<tr id="password_confirm_block">
+							<td>
+								<label style="padding-top:10px;" >Confirm Password:</label> 
+							</td>
+							<td>
+								<input id="txt_new_pw_confirm" name="txt_new_pw_confirm"  type="password"  class="easyui" required="true" style="width: 175px;">
+							</td>
+							<td>
+							</td>
+						</tr>		
+						<tr >
+							<td></td>
+							<td>
+								<div id="confirm_password_validation" style="font-size: 12px;color: red;display:none"></div>
+							</td>
+							<td></td>
+						</tr>
+						<tr>
+							<td></td>
+							<td>
+								<a href="javascript:void(0)" id="button_reset" class="easyui-linkbutton"  onclick="Reset_Password()">Change Password</a>
+							</td>
+							
+						</tr>
+						<tr>
+							<td></td>
+							<td>												
+								<a href="javascript:popUp_Password_Policy()" style="color:#01afe6">Password Policy</a>
+							</td>
+							<td></td>
+						
+						</tr>
+						<br>
+					</table>
+				</div>
+				<br>
+				<div>	
+					<div id="password_policy" style="font-size: 12px;color: red;display:none"></div>
+				</div>	 			
+	   
+				<div id="dlg_password_reset_buttons">  
+					<!--<a href="javascript:void(0)" class="easyui-linkbutton"  onclick="javascript:$('#dlg_password_reset').dialog('close');location.reload(false);">Cancel</a> -->
+					<a href="javascript:void(0)" class="easyui-linkbutton"  onclick="javascript:$('#dlg_password_reset').dialog('close')">Cancel</a> 
+				</div> 
+			</form>
+		</div>
+	
+		<!--OTP ENTER BLOCK WHEN LOG IN-->
+		<div id="dlg_login_otp" class="easyui-dialog" title="LOGIN OTP" style="padding:20px;width:400px" closed="true"  data-options="resizable:true,modal:true" buttons="#dlg_login_otp_buttons">  
+					
+			<form id="login_otp_form" method="post" novalidate enctype="multipart/form-data"> 
+			
+				<div id="dlg_login_otp_init">  
+					<table>
+						<tr id="otp_block" >
+							<td>
+								<label id="otp_label_login" style="padding-top:10px;">Enter OTP:</label> 
+							</td>
+							<td>
+								<input id="txt_otp_login" style="width:160px;" name="txt_otp_login"  required="true">	
+							</td>
+							<td>
+								<button type="button" id="button_otp" onclick="javascript:Validate_Login_OTP()" style="background-color:#1a7bc9;width:100%;color:white;border-color:white;padding:5px;">Confirm</button>
+								<!--<a href="javascript:void(0)" id="button_login_otp" class="easyui-linkbutton"  onclick="Validate_Login_OTP()" style="">Confirm</a> -->
+							</td>
+						</tr>
+						<tr >
+							<td></td>
+							<td>
+									<div id="otp_login_validation" style="font-size: 12px;color: red;display:none"></div>
+									
+							</td>
+							<td></td>
+						</tr>
+					</table>
+
+				</div>
+				
+				<div id="dlg_login_otp_buttons">  
+					<!--<a href="javascript:void(0)" class="easyui-linkbutton"  onclick="javascript:$('#dlg_login_otp').dialog('close');location.reload(false);">Cancel</a>-->
+					<a href="javascript:void(0)" class="easyui-linkbutton"  onclick="javascript:$('#dlg_login_otp').dialog('close');">Cancel</a>
+				</div>
+			
+			</form>
+		
+		</div>
+	
+    <script type="text/javascript" src="/_Incapsula_Resource?SWJIYLWA=719d34d31c8e3a6e6fffd425f7e032f3&ns=2&cb=1603079139" async></script></body>
+
+</html>

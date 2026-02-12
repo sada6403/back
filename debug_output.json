@@ -1,0 +1,28 @@
+[
+  {
+    "name": "kulendradas sabiharan",
+    "id": "696d89774f54bcc186288f42",
+    "branchName": "branch-JK-001",
+    "branchId": "branch-JK-001",
+    "email": "ksabiharan@gmail.com",
+    "bankDetails": {
+      "bankName": "BOC",
+      "branch": "Trincomalee town ",
+      "accountNumber": "93194374",
+      "accountName": "K SABIHARAN"
+    }
+  },
+  {
+    "name": "Monishan",
+    "id": "696dbbaf8b89061a562c1087",
+    "branchName": "branch-JK-001",
+    "branchId": "branch-JK-001",
+    "email": "monimomj@gmail.com",
+    "bankDetails": {
+      "bankName": "boc",
+      "branch": "mannar ",
+      "accountNumber": "94875483",
+      "accountName": "monishan "
+    }
+  }
+]

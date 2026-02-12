@@ -1,0 +1,23 @@
+Starting script...
+Connecting to MongoDB...
+Error: The `uri` parameter to `openUri()` must be a string, got "undefined". Make sure the first parameter to `mongoose.connect()` or `mongoose.createConnection()` is a string.
+Stack: MongooseError: The `uri` parameter to `openUri()` must be a string, got "undefined". Make sure the first parameter to `mongoose.connect()` or `mongoose.createConnection()` is a string.
+    at NativeConnection.createClient (c:\Projects\Management_IT\backend\node_modules\mongoose\lib\drivers\node-mongodb-native\connection.js:206:11)
+    at NativeConnection.openUri (c:\Projects\Management_IT\backend\node_modules\mongoose\lib\connection.js:766:34)
+    at Mongoose.connect (c:\Projects\Management_IT\backend\node_modules\mongoose\lib\index.js:416:15)
+    at sendCredentials (c:\Projects\Management_IT\backend\scripts\send_analyzer_credentials.js:19:24)
+    at Object.<anonymous> (c:\Projects\Management_IT\backend\scripts\send_analyzer_credentials.js:68:1)
+    at Module._compile (node:internal/modules/cjs/loader:1241:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1295:10)
+    at Module.load (node:internal/modules/cjs/loader:1091:32)
+    at Module._load (node:internal/modules/cjs/loader:938:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:83:12)
+Disconnected DB.
+Starting script...
+Connecting to MongoDB...
+Connected.
+Finding user with email: nfplantation31@gmail.com
+User found: Hussain Fathima Safna (AZ995682)
+Sending email...
+[SUCCESS] Email sent successfully to nfplantation31@gmail.com
+Disconnected DB.
