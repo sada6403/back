@@ -98,6 +98,8 @@ router.get('/', async (req, res) => {
             Employee.find() // Keep original too just in case
         ]);
 
+        console.log(`[Employees] Fetched: ${managers.length} Managers, ${fieldVisitors.length} FVs, ${analyzers.length} Analyzers`);
+
         // Return structured data as expected by Backend EmployeeService
         res.json({
             success: true,

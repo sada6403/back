@@ -58,7 +58,9 @@ try {
     app.use('/api/employees', employeeRoutes);
     app.use('/api/analysis', require('./routes/analysisRoutes'));
     app.use('/api/session', sessionRoutes);
+    app.use('/api/session', sessionRoutes);
     app.use('/api/monitor', monitorRoutes);
+    console.log('Mounting /api/monitor routes...'); // Debug log
 
     // API Ping (Diagnostic)
     app.get('/api/ping', (req, res) => res.json({
