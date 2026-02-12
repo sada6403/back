@@ -1,6 +1,7 @@
 const BranchManager = require('../models/BranchManager');
 const FieldVisitor = require('../models/FieldVisitor');
 const ITSector = require('../models/ITSector');
+const Analyzer = require('../models/Analyzer');
 // const Admin = require('../models/Admin'); // Admin is now ITSector
 const generateToken = require('../utils/generateToken');
 const { createAndSendOTP, verifyOTP } = require('../utils/otpService');
@@ -36,6 +37,11 @@ const loginUser = async (req, res, next) => {
         } else if (role === 'field' || role === 'field_visitor') {
             // Field Visitor login by userId
             user = await FieldVisitor.findOne({ userId: username });
+        } else if (role === 'analyzer') {
+            // Analyzer login by userId or email
+            user = await Analyzer.findOne({
+                $or: [{ email: username }, { userId: username }]
+            });
         } else {
             res.status(400);
             throw new Error('Invalid role');
@@ -101,10 +107,9 @@ const registerManager = async (req, res, next) => {
             });
         }
 
-        // Auto-generate userId if not provided
-        if (!userId) {
-            req.body.userId = 'MGR' + Date.now().toString().slice(-6);
-            userId = req.body.userId;
+        // Auto-generate userId if not provided or empty
+        if (!userId || userId.trim() === '' || userId === 'AUTO GEN') {
+            userId = 'MGR' + Date.now().toString().slice(-6);
         }
 
         // Determine Model based on Role
@@ -159,7 +164,8 @@ const registerManager = async (req, res, next) => {
                 branchName: branchName || 'Kalmunai',
                 branchId: branchId || 'branch-default',
                 phone: phone || '',
-                role: 'branch_manager',
+                role: 'Branch Manager',
+                salary: req.body.salary || 0,
                 status: 'active'
             });
         } else {
@@ -231,11 +237,12 @@ const registerManager = async (req, res, next) => {
                 _id: savedManager._id,
                 name: savedManager.fullName,
                 email: savedManager.email,
-                code: savedManager.userId,
+                userId: savedManager.userId,
+                code: savedManager.userId, // Backup mapping
                 role: role,
                 branchId: savedManager.branchId,
                 phone: savedManager.phone,
-                // Generate token mostly useful if they can login, assume they can
+                tempPassword: password, // Return for display
                 token: generateToken(savedManager._id, role, savedManager.branchId)
             }
         });
@@ -291,10 +298,9 @@ const registerITSector = async (req, res, next) => {
             });
         }
 
-        // Auto-generate userId if not provided
-        if (!userId) {
-            req.body.userId = 'IT' + Date.now().toString().slice(-6); // Simple random ID
-            userId = req.body.userId;
+        // Auto-generate userId if not provided or empty
+        if (!userId || userId.trim() === '' || userId === 'AUTO GEN') {
+            userId = 'IT' + Date.now().toString().slice(-6);
         }
 
         // Check if user already exists
@@ -332,8 +338,10 @@ const registerITSector = async (req, res, next) => {
                 _id: savedUser._id,
                 name: savedUser.fullName,
                 email: savedUser.email,
-                code: savedUser.userId,
+                userId: savedUser.userId,
+                code: savedUser.userId, // Backup mapping
                 role: 'it_sector',
+                tempPassword: password, // Return for display
                 token: generateToken(savedUser._id, 'it_sector', savedUser.branchId)
             }
         });
@@ -346,6 +354,75 @@ const registerITSector = async (req, res, next) => {
                 message: 'Email or userId already exists'
             });
         }
+        res.status(500).json({
+            success: false,
+            message: 'Registration failed',
+            error: error.message
+        });
+    }
+};
+
+// @desc    Register a new Analyzer employee
+// @route   POST /api/auth/register/analyzer
+// @access  Public (or Private)
+const registerAnalyzer = async (req, res, next) => {
+    try {
+        console.log('Registering Analyzer:', req.body);
+
+        let { fullName, email, password, userId, phone, nic } = req.body;
+
+        if (!fullName || !email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide all required fields: fullName, email, password'
+            });
+        }
+
+        if (!userId || userId.trim() === '' || userId === 'AUTO GEN') {
+            userId = 'AZ' + Date.now().toString().slice(-6);
+        }
+
+        const userExists = await Analyzer.findOne({
+            $or: [{ email }, { userId }]
+        });
+        if (userExists) {
+            return res.status(400).json({
+                success: false,
+                message: 'User with this email or userId already exists'
+            });
+        }
+
+        const newUser = new Analyzer({
+            fullName,
+            email,
+            password,
+            userId,
+            phone: phone || '',
+            nic: nic || '',
+            role: 'analyzer',
+            status: 'active'
+        });
+
+        const savedUser = await newUser.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Analyzer registered successfully',
+            data: {
+                id: savedUser._id.toString(),
+                _id: savedUser._id,
+                name: savedUser.fullName,
+                email: savedUser.email,
+                userId: savedUser.userId,
+                code: savedUser.userId,
+                role: 'analyzer',
+                tempPassword: password,
+                token: generateToken(savedUser._id, 'analyzer', savedUser.branchId)
+            }
+        });
+
+    } catch (error) {
+        console.error('Analyzer Registration Error:', error);
         res.status(500).json({
             success: false,
             message: 'Registration failed',
@@ -629,5 +706,6 @@ module.exports = {
     changePassword,
     forgotPassword,
     verifyOTPEndpoint,
-    resetPassword
+    resetPassword,
+    registerAnalyzer
 };

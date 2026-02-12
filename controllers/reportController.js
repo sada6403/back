@@ -749,11 +749,196 @@ const getDailyBranchComparison = async (req, res) => {
     }
 };
 
+// @desc Branch Stock: Calculate net stock per product per branch
+// @route GET /api/reports/branch-stock
+const getBranchStock = async (req, res) => {
+    try {
+        let { branchId } = req.query;
+        const match = {};
+
+        if (branchId && branchId !== 'All') {
+            // Resolve branchId if it's a name
+            const branchRecord = await BranchManager.findOne({
+                $or: [{ branchId: branchId }, { branchName: branchId }]
+            }).select('branchId').lean();
+
+            if (branchRecord) {
+                branchId = branchRecord.branchId;
+            }
+            match.branchId = branchId;
+        }
+
+        const stockData = await Transaction.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: { branchId: '$branchId', productName: '$productName' },
+                    totalBuy: {
+                        $sum: { $cond: [{ $eq: ['$type', 'buy'] }, '$quantity', 0] }
+                    },
+                    totalSell: {
+                        $sum: { $cond: [{ $eq: ['$type', 'sell'] }, '$quantity', 0] }
+                    }
+                }
+            },
+            {
+                $project: {
+                    branchId: '$_id.branchId',
+                    productName: '$_id.productName',
+                    totalBuy: 1,
+                    totalSell: 1,
+                    currentStock: { $subtract: ['$totalBuy', '$totalSell'] }
+                }
+            }
+        ]);
+
+        // Map branch names
+        const branchIds = [...new Set(stockData.map(s => s.branchId))];
+        const branches = await BranchManager.find({ branchId: { $in: branchIds } }).select('branchId branchName').lean();
+        const branchMap = new Map(branches.map(b => [b.branchId, b.branchName]));
+
+        const results = stockData.map(item => ({
+            ...item,
+            branchName: branchMap.get(item.branchId) || item.branchId
+        }));
+
+        res.json({ success: true, data: results });
+    } catch (error) {
+        console.error('[getBranchStock] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+// @desc Branch Financials: Buy/Sell totals per branch over date range
+// @route GET /api/reports/branch-financials
+const getBranchFinancials = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const match = {};
+
+        if (startDate || endDate) {
+            match.date = {};
+            if (startDate) match.date.$gte = new Date(startDate);
+            if (endDate) match.date.$lte = new Date(endDate);
+        }
+
+        const financialData = await Transaction.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: { branchId: '$branchId', type: '$type' },
+                    totalAmount: { $sum: '$totalAmount' }
+                }
+            }
+        ]);
+
+        const branchMap = {};
+        const branchIds = [...new Set(financialData.map(f => f._id.branchId))];
+        const branches = await BranchManager.find({ branchId: { $in: branchIds } }).select('branchId branchName').lean();
+        const nameMap = new Map(branches.map(b => [b.branchId, b.branchName]));
+
+        financialData.forEach(item => {
+            const bId = item._id.branchId;
+            const bName = nameMap.get(bId) || bId;
+            if (!branchMap[bName]) {
+                branchMap[bName] = { branchId: bId, buy: 0, sell: 0 };
+            }
+            if (item._id.type === 'buy') {
+                branchMap[bName].buy = item.totalAmount;
+            } else if (item._id.type === 'sell') {
+                branchMap[bName].sell = item.totalAmount;
+            }
+        });
+
+        res.json({ success: true, data: branchMap });
+    } catch (error) {
+        console.error('[getBranchFinancials] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
+// @desc FV Performance: Performance stats for all FVs in a branch
+// @route GET /api/reports/fv-performance
+const getFVPerformance = async (req, res) => {
+    try {
+        let { branchId, startDate, endDate } = req.query;
+        if (!branchId || branchId === 'All') {
+            return res.status(400).json({ success: false, message: 'Specific branchId is required' });
+        }
+
+        // Resolve branchId if it's a name
+        const branchRecord = await BranchManager.findOne({
+            $or: [{ branchId: branchId }, { branchName: branchId }]
+        }).select('branchId').lean();
+
+        if (branchRecord) {
+            branchId = branchRecord.branchId;
+        }
+
+        const match = { branchId };
+        if (startDate || endDate) {
+            match.date = {};
+            if (startDate) match.date.$gte = new Date(startDate);
+            if (endDate) match.date.$lte = new Date(endDate);
+        }
+
+        const performanceData = await Transaction.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: { fieldVisitorId: '$fieldVisitorId', type: '$type' },
+                    totalAmount: { $sum: '$totalAmount' },
+                    transactionCount: { $sum: 1 }
+                }
+            }
+        ]);
+
+        const fvs = await FieldVisitor.find({ branchId }).select('name userId').lean();
+        const fvMap = new Map();
+
+        fvs.forEach(fv => {
+            fvMap.set(fv._id.toString(), {
+                name: fv.name || fv.userId,
+                userId: fv.userId,
+                buyAmount: 0,
+                sellAmount: 0,
+                buyCount: 0,
+                sellCount: 0
+            });
+        });
+
+        performanceData.forEach(item => {
+            const fvId = item._id.fieldVisitorId?.toString();
+            if (fvMap.has(fvId)) {
+                const data = fvMap.get(fvId);
+                if (item._id.type === 'buy') {
+                    data.buyAmount = item.totalAmount;
+                    data.buyCount = item.transactionCount;
+                } else if (item._id.type === 'sell') {
+                    data.sellAmount = item.totalAmount;
+                    data.sellCount = item.transactionCount;
+                }
+            }
+        });
+
+        res.json({
+            success: true,
+            data: Array.from(fvMap.values())
+        });
+    } catch (error) {
+        console.error('[getFVPerformance] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+};
+
 module.exports = {
     getManagerDashboard,
     getFieldVisitorDashboard,
     getYearlyAnalysis,
     getDashboardStats,
     getMemberTransactions,
-    getDailyBranchComparison
+    getDailyBranchComparison,
+    getBranchStock,
+    getBranchFinancials,
+    getFVPerformance
 };

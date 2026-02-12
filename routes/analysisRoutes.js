@@ -67,26 +67,69 @@ router.post('/activity', async (req, res) => {
     }
 });
 
+const { generateAnalysisReport } = require('../utils/analysisReportGenerator');
+
 // GET DASHBOARD ANALYSIS (Sessions & Activities)
-// Optionally filter by role, e.g., ?role=IT Sector
+// Optionally filter by role, userId, startDate, endDate
 router.get('/data', async (req, res) => {
     try {
-        const roleFilter = req.query.role;
-        const query = roleFilter ? { role: roleFilter } : {};
+        const { role, userId, startDate, endDate } = req.query;
+        const query = {};
+        if (role) query.role = role;
+        if (userId) query.userId = userId;
 
-        // Fetch Sessions (sort by loginTime desc)
+        if (startDate || endDate) {
+            const dateQuery = {};
+            if (startDate) dateQuery.$gte = new Date(startDate);
+            if (endDate) dateQuery.$lte = new Date(endDate);
+
+            // For sessions, we use loginTime. For activities, timestamp.
+            const sessionQuery = { ...query, loginTime: dateQuery };
+            const activityQuery = { ...query, timestamp: dateQuery };
+
+            const sessions = await UserSession.find(sessionQuery).sort({ loginTime: -1 }).limit(100);
+            const activities = await ActivityLog.find(activityQuery).sort({ timestamp: -1 }).limit(100);
+
+            return res.json({ success: true, sessions, activities });
+        }
+
         const sessions = await UserSession.find(query).sort({ loginTime: -1 }).limit(100);
-
-        // Fetch Activities
         const activities = await ActivityLog.find(query).sort({ timestamp: -1 }).limit(100);
 
-        res.json({
-            success: true,
-            sessions,
-            activities
-        });
+        res.json({ success: true, sessions, activities });
     } catch (e) {
         console.error('Analysis Data Error:', e);
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GENERATE ANALYSIS REPORT
+router.get('/report', async (req, res) => {
+    try {
+        const { role, userId, startDate, endDate } = req.query;
+        const query = {};
+        if (role) query.role = role;
+        if (userId) query.userId = userId;
+
+        const dateQuery = {};
+        if (startDate) dateQuery.$gte = new Date(startDate);
+        if (endDate) dateQuery.$lte = new Date(endDate);
+
+        const sessionQuery = { ...query };
+        const activityQuery = { ...query };
+        if (Object.keys(dateQuery).length > 0) {
+            sessionQuery.loginTime = dateQuery;
+            activityQuery.timestamp = dateQuery;
+        }
+
+        const sessions = await UserSession.find(sessionQuery).sort({ loginTime: -1 }).limit(500);
+        const activities = await ActivityLog.find(activityQuery).sort({ timestamp: -1 }).limit(1000);
+
+        const reportUrl = await generateAnalysisReport(sessions, activities, { userId, startDate, endDate });
+
+        res.json({ success: true, reportUrl });
+    } catch (e) {
+        console.error('Analysis Report Error:', e);
         res.status(500).json({ success: false, message: e.message });
     }
 });

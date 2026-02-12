@@ -1,0 +1,6 @@
+﻿Connected to MongoDB
+--- Members in Karachchi (BR-KC-001) ---
+Original FV IDs found in Karachchi: []
+
+--- Members in Kandawalai (BR-KA-002) ---
+Original FV IDs found in Kandawalai: []

@@ -1,0 +1,249 @@
+Connected to DB
+Total Sessions: 213
+Online Sessions (isOnline=true): 3
+Total Kandeepan Sessions: 40
+--- Kandeepan Session 1 ---
+_id: 69847bbe6eb19845e279fe47
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Thu Feb 05 2026 16:45:10 GMT+0530 (India Standard Time)
+--- Kandeepan Session 2 ---
+_id: 6981ffccd761a8147dc52e22
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 19:31:48 GMT+0530 (India Standard Time)
+--- Kandeepan Session 3 ---
+_id: 698203e66b1d77bb8d68e26b
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 19:49:18 GMT+0530 (India Standard Time)
+--- Kandeepan Session 4 ---
+_id: 698205e6083fe84bedb368a4
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 19:57:50 GMT+0530 (India Standard Time)
+--- Kandeepan Session 5 ---
+_id: 698206ea083fe84bedb36930
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 20:02:10 GMT+0530 (India Standard Time)
+--- Kandeepan Session 6 ---
+_id: 69825203cc9885a7eb0a4d4f
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Wed Feb 04 2026 01:22:35 GMT+0530 (India Standard Time)
+--- Kandeepan Session 7 ---
+_id: 6982534797e0485ab3a6dde8
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Wed Feb 04 2026 01:27:59 GMT+0530 (India Standard Time)
+--- Kandeepan Session 8 ---
+_id: 6982e7e6cc9885a7eb0a4f07
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Wed Feb 04 2026 12:02:06 GMT+0530 (India Standard Time)
+--- Kandeepan Session 9 ---
+_id: 698442e06eb19845e279e9f7
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Thu Feb 05 2026 12:42:32 GMT+0530 (India Standard Time)
+--- Kandeepan Session 10 ---
+_id: 698458936eb19845e279f2eb
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Thu Feb 05 2026 14:15:07 GMT+0530 (India Standard Time)
+--- Kandeepan Session 11 ---
+_id: 6981fe05922cedd3c00a1eb8
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 19:24:13 GMT+0530 (India Standard Time)
+--- Kandeepan Session 12 ---
+_id: 6984cc12ad9dd41ade8782a4
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Thu Feb 05 2026 22:27:54 GMT+0530 (India Standard Time)
+--- Kandeepan Session 13 ---
+_id: 69852c7fad9dd41ade8794f4
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Fri Feb 06 2026 05:19:19 GMT+0530 (India Standard Time)
+--- Kandeepan Session 14 ---
+_id: 69852ceaad9dd41ade879549
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Fri Feb 06 2026 05:21:06 GMT+0530 (India Standard Time)
+--- Kandeepan Session 15 ---
+_id: 69852d22ad9dd41ade879571
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Fri Feb 06 2026 05:22:02 GMT+0530 (India Standard Time)
+--- Kandeepan Session 16 ---
+_id: 69854fb4ad9dd41ade87a5f0
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Fri Feb 06 2026 07:49:32 GMT+0530 (India Standard Time)
+--- Kandeepan Session 17 ---
+_id: 69870eb0ad9dd41ade881f29
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Feb 07 2026 15:36:40 GMT+0530 (India Standard Time)
+--- Kandeepan Session 18 ---
+_id: 69872a8fad9dd41ade882440
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Feb 07 2026 17:35:35 GMT+0530 (India Standard Time)
+--- Kandeepan Session 19 ---
+_id: 698a07d4ad9dd41ade88825d
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Mon Feb 09 2026 21:44:12 GMT+0530 (India Standard Time)
+--- Kandeepan Session 20 ---
+_id: 698c429cad9dd41ade88e116
+isOnline: true (Type: boolean)
+lastPing: Thu Feb 12 2026 07:29:17 GMT+0530 (India Standard Time)
+loginTime: Wed Feb 11 2026 14:19:32 GMT+0530 (India Standard Time)
+--- Kandeepan Session 21 ---
+_id: 697f457fe620c4603130308f
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sun Feb 01 2026 17:52:23 GMT+0530 (India Standard Time)
+--- Kandeepan Session 22 ---
+_id: 6974f2fe81fdf3b548f17ed0
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 21:57:42 GMT+0530 (India Standard Time)
+--- Kandeepan Session 23 ---
+_id: 697496d41c0cf6163970d30e
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 15:24:28 GMT+0530 (India Standard Time)
+--- Kandeepan Session 24 ---
+_id: 6974e3d881fdf3b548f176e9
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 20:53:04 GMT+0530 (India Standard Time)
+--- Kandeepan Session 25 ---
+_id: 6974ba3e3c89b5eb5538ddd2
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 17:55:34 GMT+0530 (India Standard Time)
+--- Kandeepan Session 26 ---
+_id: 6974e63181fdf3b548f1781b
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 21:03:05 GMT+0530 (India Standard Time)
+--- Kandeepan Session 27 ---
+_id: 6974ed7d81fdf3b548f17a42
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 21:34:13 GMT+0530 (India Standard Time)
+--- Kandeepan Session 28 ---
+_id: 697dd8a8e620c460313004a0
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 31 2026 15:55:44 GMT+0530 (India Standard Time)
+--- Kandeepan Session 29 ---
+_id: 697dd988e620c460313004d4
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 31 2026 15:59:28 GMT+0530 (India Standard Time)
+--- Kandeepan Session 30 ---
+_id: 697dda32e620c46031300501
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 31 2026 16:02:18 GMT+0530 (India Standard Time)
+--- Kandeepan Session 31 ---
+_id: 6974967a1c0cf6163970d2c2
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sat Jan 24 2026 15:22:58 GMT+0530 (India Standard Time)
+--- Kandeepan Session 32 ---
+_id: 697f67a6e620c46031303ca6
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Sun Feb 01 2026 20:18:06 GMT+0530 (India Standard Time)
+--- Kandeepan Session 33 ---
+_id: 6981e3cacc9885a7eb0a3816
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 17:32:18 GMT+0530 (India Standard Time)
+--- Kandeepan Session 34 ---
+_id: 6981e8ba1bea33de082e9142
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 17:53:22 GMT+0530 (India Standard Time)
+--- Kandeepan Session 35 ---
+_id: 6981eab9a8773c68249f95b0
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 18:01:53 GMT+0530 (India Standard Time)
+--- Kandeepan Session 36 ---
+_id: 6981ed64083fab732e41206f
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 18:13:16 GMT+0530 (India Standard Time)
+--- Kandeepan Session 37 ---
+_id: 6981ee0a1a9f64670747ab85
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 18:16:02 GMT+0530 (India Standard Time)
+--- Kandeepan Session 38 ---
+_id: 6981eed22017360a4e07a084
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 18:19:22 GMT+0530 (India Standard Time)
+--- Kandeepan Session 39 ---
+_id: 6981f0e30a54cbac55c3ed68
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 18:28:11 GMT+0530 (India Standard Time)
+--- Kandeepan Session 40 ---
+_id: 6981fcad8fbf13a7861a94d4
+isOnline: false (Type: boolean)
+lastPing: Wed Feb 11 2026 07:57:07 GMT+0530 (India Standard Time)
+loginTime: Tue Feb 03 2026 19:18:29 GMT+0530 (India Standard Time)
+--- RAW DOCUMENT DUMP ---
+{
+  "_id": "698c936bb333651abdb7e0d3",
+  "userId": "698c8db5923f9f4a2287a443",
+  "username": "Hussain Fathima Safna",
+  "role": "analyzer",
+  "branchName": "All",
+  "branchId": "All",
+  "isOnline": false,
+  "sessionToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5OGM4ZGI1OTIzZjlmNGEyMjg3YTQ0MyIsInJvbGUiOiJhbmFseXplciIsImJyYW5jaElkIjoiQWxsIiwiaWF0IjoxNzcwODIwNDU4LCJleHAiOjE3NzM0MTI0NTh9.5iwRa1pamt7-O3_-vmvu9kS0TzVyO6vqXW9ZUA4Wj3E",
+  "loginTime": "2026-02-11T14:34:19.325Z",
+  "lastPing": "2026-02-11T16:33:19.533Z",
+  "durationMinutes": 129,
+  "deviceId": "device_1770820458948",
+  "platform": "unknown",
+  "appVersion": "1.0.0+1",
+  "deviceInfo": "Unknown Device",
+  "ipAddress": "127.0.0.1",
+  "currentScreen": null,
+  "createdAt": "2026-02-11T14:34:19.328Z",
+  "updatedAt": "2026-02-11T16:43:52.440Z",
+  "__v": 0,
+  "logoutTime": "2026-02-11T16:43:52.073Z"
+}
+Type of isOnline: boolean
+Type of lastPing: object (Is Date? true)
+Count with isOnline="true" (string): 3
+Count with isOnline=true (boolean): 3
+--- Online Sessions Details ---
+User: Canisius bede lavapperiyan (DEV-IT-2004)
+  Role: admin
+  Last Ping: Thu Feb 12 2026 07:29:17 GMT+0530 (India Standard Time) (0 mins ago)
+  Device: unknown - undefined
+---
+User: Canisius bede lavapperiyan (DEV-IT-2004)
+  Role: admin
+  Last Ping: Thu Feb 12 2026 07:29:17 GMT+0530 (India Standard Time) (0 mins ago)
+  Device: unknown - undefined
+---
+User: Kandeepan Abisajan (DEV-IT-2509)
+  Role: admin
+  Last Ping: Thu Feb 12 2026 07:29:17 GMT+0530 (India Standard Time) (0 mins ago)
+  Device: unknown - undefined
+---
+Sessions pinged in last 15 mins: 3

@@ -1,0 +1,17 @@
+﻿Connected to MongoDB
+Searching through 833 members...
+
+Match found for Sasikala in Member FAAP096:
+  FV Name: undefined
+  FV ID: undefined
+  Registration Data: {"fullName":"santhira kumar sasikala","nic":"825500090v","mobile":"0753629283","email":"","location":"school road vinayagapuram 2","mobile_normalized":"+94753629283","resident_fullName":"santhira kumar sasikala","resident_mobile":"0753629283","resident_dob":"1982-02-19","resident_occupation":"house wife","resident_education":"Advanced Level (A/L)","landSize":"20","activity":"10","waterFacility":"Yes","electricity":"Yes","machinery":"No","quantityPlants":"50"}
+
+Match found for Sasikala in Member FAAP174:
+  FV Name: undefined
+  FV ID: undefined
+  Registration Data: {"fullName":"yogarasa sasikala","nic":"787040136V","mobile":"0768116892","email":"","location":"wachchikuda","mobile_normalized":"+94768116892","resident_fullName":"yogarasa sasikala","resident_mobile":"0768116892","resident_dob":"1978-07-22","resident_occupation":"house wife","resident_education":"Ordinary Level (O/L)","landSize":"20","activity":"3","waterFacility":"Yes","electricity":"Yes","machinery":"Yes","quantityPlants":"50"}
+
+Match found for Sasikala in Member FAAP192:
+  FV Name: undefined
+  FV ID: undefined
+  Registration Data: {"fullName":"Nanthakumar sasikala","nic":"856920640v","mobile":"0756461722","email":"","location":"central road vinayagapuram 4","mobile_normalized":"+94756461722","resident_fullName":"Nanthakumar sasikala","resident_mobile":"0756461722","resident_dob":"1985-07-10","resident_occupation":"house wife","resident_education":"Ordinary Level (O/L)","landSize":"20","activity":"10","waterFacility":"Yes","electricity":"Yes","machinery":"No","quantityPlants":"50"}

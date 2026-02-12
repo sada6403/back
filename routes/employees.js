@@ -84,15 +84,17 @@ const FieldVisitor = require('../models/FieldVisitor');
 const BranchManager = require('../models/BranchManager');
 
 const ITSector = require('../models/ITSector');
+const Analyzer = require('../models/Analyzer');
 
 // GET all employees (Aggregated from sub-collections)
 router.get('/', async (req, res) => {
     try {
-        const [managers, fieldVisitors, branchManagers, itSectors, employees] = await Promise.all([
+        const [managers, fieldVisitors, branchManagers, itSectors, analyzers, employees] = await Promise.all([
             Manager.find(),
             FieldVisitor.find(),
             BranchManager.find(),
             ITSector.find(),
+            Analyzer.find(),
             Employee.find() // Keep original too just in case
         ]);
 
@@ -104,6 +106,7 @@ router.get('/', async (req, res) => {
                 fieldVisitors,
                 branchManagers,
                 itSectors,
+                analyzers: analyzers, // Added
                 employees
             }
         });
@@ -144,11 +147,12 @@ router.post('/', async (req, res) => {
         const rLower = role.toLowerCase();
 
         if (rLower.includes('branch manager') ||
-            (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector'))) {
+            (rLower.includes('manager') && !rLower.includes('field') && !rLower.includes('it sector') && !rLower.includes('analyzer'))) {
             TargetModel = BranchManager;
         }
         else if (rLower.includes('field visitor')) TargetModel = FieldVisitor;
         else if (rLower.includes('it sector')) TargetModel = ITSector;
+        else if (rLower.includes('analyzer')) TargetModel = Analyzer;
         else {
             // Dynamic Collection for unknown roles
             const collectionName = rLower.replace(/ /g, '');
@@ -304,7 +308,7 @@ router.post('/', async (req, res) => {
 // PUT update employee
 router.put('/:id', async (req, res) => {
     try {
-        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Analyzer, Employee];
         let updated = null;
 
         for (const model of models) {
@@ -344,7 +348,7 @@ router.put('/:id', async (req, res) => {
 // DELETE
 router.delete('/:id', async (req, res) => {
     try {
-        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Analyzer, Employee];
         let deleted = null;
 
         for (const model of models) {
@@ -372,7 +376,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/reset-password/:employeeId', async (req, res) => {
     try {
         const id = req.params.employeeId;
-        const models = [Manager, FieldVisitor, BranchManager, ITSector, Employee];
+        const models = [Manager, FieldVisitor, BranchManager, ITSector, Analyzer, Employee];
         let employee = null;
         let usedModel = null;
 
@@ -472,7 +476,7 @@ router.post('/reset-password/:employeeId', async (req, res) => {
 // PATCH toggle employee status
 router.patch('/:id/status', async (req, res) => {
     try {
-        const models = [ITSector, BranchManager, FieldVisitor, Manager, Employee];
+        const models = [ITSector, BranchManager, FieldVisitor, Manager, Analyzer, Employee];
         let employee = null;
         let usedModel = null;
 

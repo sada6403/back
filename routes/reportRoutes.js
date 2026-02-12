@@ -6,7 +6,10 @@ const {
 	getYearlyAnalysis,
 	getDashboardStats,
 	getMemberTransactions,
-	getDailyBranchComparison
+	getDailyBranchComparison,
+	getBranchStock,
+	getBranchFinancials,
+	getFVPerformance
 } = require('../controllers/reportController');
 const { getVisualAnalytics } = require('../controllers/visualAnalyticsController');
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -35,5 +38,8 @@ router.get('/member-transactions', protect, getMemberTransactions);
 router.get('/yearly', protect, getYearlyAnalysis);
 router.get('/daily-branch-comparison', protect, getDailyBranchComparison);
 router.get('/visual-analytics', protect, getVisualAnalytics);
+router.get('/branch-stock', protect, getBranchStock);
+router.get('/branch-financials', protect, getBranchFinancials);
+router.get('/fv-performance', protect, getFVPerformance);
 
 module.exports = router;

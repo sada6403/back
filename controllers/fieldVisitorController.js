@@ -83,44 +83,46 @@ const registerFieldVisitor = async (req, res, next) => {
 
 
         // Determine Area from input (This fixes 'default-area' display)
-        const area = req.body.branch || 'default-area';
+        const area = req.body.branch || req.body.area || req.body.branchName || 'default-area';
 
         // Determine Branch Code for ID Generation
         let branchCode = 'GEN';
 
-        // logic: FV-(branch 2 letter)-3 digite number
-        // "branch 2 letter is similar to brange manager's user id"
-        // ex: Manager BM-KM-001 -> Branch Code is KM.
-        // ex: Manager MGR-KM-001 -> Branch Code is KM.
         if (req.user && req.user.userId) {
             const parts = req.user.userId.split('-');
-            // Expecting format PREFIX-BRANCH-SEQ (MGR-KM-001)
             if (parts.length >= 2) {
                 branchCode = parts[1];
             }
         } else if (area !== 'default-area') {
-            // Fallback: use first 2 letters of the provided branch name
             branchCode = area.substring(0, 2).toUpperCase();
         }
 
-        // Generate User ID: FV-{BranchCode}-XXX
-        // Count existing users with this pattern to determine sequence
-        const count = await FieldVisitor.countDocuments({
-            userId: { $regex: new RegExp(`^FV-${branchCode}-\\d{3}$`) }
-        });
-        const sequence = (count + 1).toString().padStart(3, '0');
-        const generatedUserId = `FV-${branchCode}-${sequence}`;
+        // Use provided userId or generate one
+        let finalUserId = userId;
+        if (!finalUserId) {
+            const count = await FieldVisitor.countDocuments({
+                userId: { $regex: new RegExp(`^FV-${branchCode}-\\d{3}$`) }
+            });
+            const sequence = (count + 1).toString().padStart(3, '0');
+            finalUserId = `FV-${branchCode}-${sequence}`;
+        }
 
-        // Generate Random Password: NF + 5 random digits
-        const generatedPassword = 'NF' + Math.floor(10000 + Math.random() * 90000).toString();
+        // Use provided password or generate one
+        let finalPassword = password;
+        if (!finalPassword) {
+            finalPassword = 'NF' + Math.floor(10000 + Math.random() * 90000).toString();
+        }
 
         // Create new field visitor instance
         const newFieldVisitor = new FieldVisitor({
-            name,
-            userId: generatedUserId, // Override input
+            fullName: name, // Map to schema
+            userId: finalUserId,
             phone,
-            password: generatedPassword, // Override input
+            password: finalPassword,
             email,
+            role: 'Field Visitor', // Match schema/UI convention
+            salary: req.body.salary || 0, // Required field
+            branchName: area, // Required field
 
             // New Fields
             postalAddress, permanentAddress, dob, nic, gender, civilStatus,
@@ -180,9 +182,9 @@ const registerFieldVisitor = async (req, res, next) => {
                 id: savedFieldVisitor._id.toString(), // Use 'id' for Flutter compatibility
                 _id: savedFieldVisitor._id,
                 name: savedFieldVisitor.name,
-                userId: generatedUserId,
+                userId: finalUserId,
                 // Return RAW password so frontend can display it one-time
-                tempPassword: generatedPassword,
+                tempPassword: finalPassword,
                 phone: savedFieldVisitor.phone,
                 branchId: savedFieldVisitor.branchId,
                 status: savedFieldVisitor.status,

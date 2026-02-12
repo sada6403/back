@@ -1,0 +1,1 @@
+Error: PlanExecutor error during aggregation :: caused by :: The argument to $size must be an array, but was of type: missing

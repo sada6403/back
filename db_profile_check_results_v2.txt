@@ -1,0 +1,112 @@
+﻿Connected to MongoDB
+
+--- ALL Field Visitors with non-placeholder data ---
+FV-JA-002 | undefined | Phone: 0706189612 | NIC: 200122712908 | Branch: BR-JA-001
+FV-KM-001 | Rasarathinam Sutharsini | Phone: 0766586164 | NIC: 936770762V | Branch: BR-KM-001
+FV-JA-003 | JHON RAMALINGAM | Phone: 0703027685 | NIC: 200322912052 | Branch: BR-JA-001
+FV-KM-002 | undefined | Phone: 0761001584 | NIC: 855583755V | Branch: BR-KM-001
+FV-PU-001 | undefined | Phone: 0766830441 | NIC: 997712218V | Branch: BR-PU-001
+FV-PU-002 | undefined | Phone: 0767642943 | NIC: 897814480v | Branch: BR-PU-001
+FV-KM-003 | undefined | Phone: 0756850081 | NIC: 861312160V | Branch: BR-KM-001
+FV-KM-004 | undefined | Phone: 0762334463 | NIC: 200383213324 | Branch: BR-KM-001
+FV-KM-005 | undefined | Phone: 0777107509 | NIC: 197779403618 | Branch: BR-KM-001
+FV-KM-006 | undefined | Phone: 0779923294 | NIC: 955662946V | Branch: BR-KM-001
+FV-KM-007 | undefined | Phone: 0764516398 | NIC: 987082615V | Branch: BR-KM-001
+FV-KM-008 | undefined | Phone: 0757596939 | NIC: 815543963V | Branch: BR-KM-001
+FV-KM-009 | undefined | Phone: 0743464367 | NIC: 200577804330 | Branch: BR-KM-001
+FV-KM-010 | undefined | Phone: 0757813648 | NIC: 856644235V | Branch: BR-KM-001
+FV-PU-003 | undefined | Phone: 0770090969 | NIC: 838121136v | Branch: BR-PU-001
+FV-PU-004 | undefined | Phone: 0771935163 | NIC: 966543388v | Branch: BR-PU-001
+FV-KM-011 | undefined | Phone: 0741911026 | NIC: 801651526V | Branch: BR-KM-001
+FV-PU-005 | undefined | Phone: 0774138996 | NIC: 198280004816 | Branch: BR-PU-001
+FV-PU-006 | undefined | Phone: 0770417496 | NIC: 780894474v | Branch: BR-PU-001
+FV-PU-007 | undefined | Phone: 0767885064 | NIC: 197886302533 | Branch: BR-PU-001
+FV-JA-004 | undefined | Phone: 0743469972 | NIC: 200044578965 | Branch: BR-JA-002
+FV-MW-001 | Kalimuththu kajana | Phone: 0742754451 | NIC: 977462533v | Branch: BR-MW-001
+FV-MW-002 | undefined | Phone: 0768089564 | NIC: 996610730v | Branch: BR-MW-001
+FV-KM-012 | undefined | Phone: 0752641082 | NIC: 198163802165 | Branch: BR-KM-001
+FV-PU-008 | undefined | Phone: 0778446509 | NIC: 737093530v | Branch: BR-PU-001
+FV-PU-009 | undefined | Phone: 0767885064 | NIC: 197886302533 | Branch: BR-PU-001
+FV-PU-010 | undefined | Phone: 0774525305 | NIC: 737082806v | Branch: BR-PU-001
+FV-MW-003 | undefined | Phone: 0767374620 | NIC: 867012443v | Branch: BR-MW-001
+FV-AP-001 | undefined | Phone: 0773871330 | NIC: 1991799023983 | Branch: BR-AK-001
+FV-AP-002 | undefined | Phone: 0757950746 | NIC: 958551320v | Branch: BR-AK-001
+FV-AP-003 | undefined | Phone: 0774760935 | NIC: 200017903743 | Branch: BR-AK-001
+FV-AP-004 | undefined | Phone: 0752443288 | NIC: 966454067v | Branch: BR-AK-001
+FV-KN-001 | undefined | Phone: 0774423703 | NIC: 197250901095 | Branch: BR-KN-001
+FV-KN-002 | undefined | Phone: 0768558320 | NIC: 199372910015 | Branch: BR-KN-001
+FV-AM-001 | undefined | Phone: 0742944408 | NIC: 905382080v222 | Branch: BR-AM-001
+FV-AM-002 | undefined | Phone: 0742004123 | NIC: 198756603283 | Branch: BR-AM-001
+FV-AM-003 | undefined | Phone: 0763195060 | NIC: 857572602v876 | Branch: BR-AM-001
+FV-KN-008 | undefined | Phone: 0763108603 | NIC: 200174502075 | Branch: BR-KN-002
+FV-KN-009 | undefined | Phone: 0767992418 | NIC: 927373971v | Branch: BR-KN-002
+FV-KN-010 | undefined | Phone: 0765476914 | NIC: 978081886v | Branch: BR-KN-002
+FV-KN-011 | undefined | Phone: 0768767857 | NIC: 876724260v | Branch: BR-KN-002
+FV-PU-011 | undefined | Phone: 0779742047 | NIC: 198678600550 | Branch: BR-PU-001
+FV-PU-012 | undefined | Phone: 0779742047 | NIC: 198678600550 | Branch: BR-PU-001
+FV-PU-013 | undefined | Phone: 0770839501 | NIC: 928612724v | Branch: BR-PU-001
+FV-KM-013 | undefined | Phone: 0778698535 | NIC: 943060665V | Branch: BR-KM-001
+FV-VN-001 | undefined | Phone: 0769886689 | NIC: 200660000805 | Branch: BR-VN-001
+FV-AP-005 | undefined | Phone: 0755581217 | NIC: 200375610039 | Branch: BR-AK-001
+FV-AP-006 | undefined | Phone: 0760261622 | NIC: 200219903722 | Branch: BR-AK-001
+FV-AP-007 | undefined | Phone: 0753847472 | NIC: 200259200320 | Branch: BR-AK-001
+FV-KN-003 | undefined | Phone: 0765394845 | NIC: 896944150v646409602856 | Branch: BR-KN-001
+FV-KN-004 | undefined | Phone: 0740223944 | NIC: 896872222v494103 | Branch: BR-KN-001
+FV-VN-002 | undefined | Phone: 0760733558 | NIC: 928600750V | Branch: BR-VN-001
+FV-VN-003 | Hawane kubure Gedara Shyamala Jeevani Bandara | Phone: 0714886103 | NIC: 827770620V | Branch: BR-VN-001
+FV-KN-012 | undefined | Phone: 0743357792 | NIC: 198186101420 | Branch: BR-KN-002
+FV-MV-001 | undefined | Phone: 0771399415 | NIC: 198858204234 | Branch: BR-MV-001
+FV-NK-001 | undefined | Phone: 0770120591 | NIC: 886722940v | Branch: BR-NK-001
+FV-MV-002 | undefined | Phone: 0777607379 | NIC: 807492888v | Branch: BR-MV-001
+FV-NK-002 | undefined | Phone: 0761998145 | NIC: 917143420v | Branch: BR-NK-001
+FV-MV-003 | undefined | Phone: 0769039487 | NIC: 198379001154 | Branch: BR-MV-001
+FV-VN-004 | Sureshkumar Loorththumery | Phone: 0772480313 | NIC: 198457203630 | Branch: BR-VN-001
+FV-NK-003 | undefined | Phone: 0760676478 | NIC: 198685201457 | Branch: BR-NK-001
+FV-KN-013 | undefined | Phone: 0712458295 | NIC: 755733008v | Branch: BR-KN-002
+FV-NK-004 | undefined | Phone: 0773635587 | NIC: 956162491vj | Branch: BR-NK-001
+FV-NK-005 | undefined | Phone: 0776481991 | NIC: 199079402104 ok | Branch: BR-NK-001
+FV-KN-014 | undefined | Phone: 0775328342 | NIC: 798145401v | Branch: BR-KN-002
+FV-VN-005 | undefined | Phone: 0702239150 | NIC: 846014837V | Branch: BR-VN-001
+FV-NK-006 | undefined | Phone: 0775154488 | NIC: 876850290v965165 | Branch: BR-NK-001
+FV-MV-004 | undefined | Phone: 0773435248 | NIC: 736893371v | Branch: BR-MV-001
+FV-NK-007 | undefined | Phone: 0779735277 | NIC: 808424754v | Branch: BR-NK-001
+FV-VN-006 | undefined | Phone: 0768256499 | NIC: 198757502448 | Branch: BR-VN-001
+FV-MV-005 | undefined | Phone: 0770066925 | NIC: 198770601922 | Branch: BR-MV-001
+FV-KN-005 | undefined | Phone: 0777913518 | NIC: 817755305v | Branch: BR-KN-001
+FV-KN-006 | undefined | Phone: 0760381485 | NIC: 785564936v | Branch: BR-KN-001
+FV-VN-007 | undefined | Phone: 0776825904 | NIC: 198750803244 | Branch: BR-VN-001
+FV-VN-008 | undefined | Phone: 0776001088 | NIC: 978450113V | Branch: BR-VN-001
+FV-MV-006 | undefined | Phone: 0773880889 | NIC: 197156603414 | Branch: BR-MV-001
+FV-MV-007 | undefined | Phone: 0776352135 | NIC: 198775602514 | Branch: BR-MV-001
+FV-VN-009 | Vasuthevan Swarna | Phone: 0772165553 | NIC: 198569302362 | Branch: BR-VN-001
+FV-MN-001 | undefined | Phone: 0762054667 | NIC: 865924143V9 | Branch: BR-MN-001
+FV-KM-014 | undefined | Phone: 0756207701 | NIC: 866600651V | Branch: BR-KM-001
+FV-AM-004 | undefined | Phone: 0742430279 | NIC: 200465903907 | Branch: BR-AM-001
+FV-AM-005 | undefined | Phone: 0701048871 | NIC: 200762901263 | Branch: BR-AM-001
+FV-AM-006 | undefined | Phone: 0753506171 | NIC: 913403479v | Branch: BR-AM-001
+FV-MN-002 | undefined | Phone: 0769368826 | NIC: 966661682V | Branch: BR-MN-001
+FV-MN-003 | undefined | Phone: 0740857712 | NIC: 885502830v | Branch: BR-MN-001
+FV-MN-004 | undefined | Phone: 0753680049 | NIC: 977770513V | Branch: BR-MN-001
+FV-KN-015 | Thevalingam Sakila | Phone: 0771431338 | NIC: 946264504v | Branch: BR-KN-001
+FV-KN-016 | undefined | Phone: 0779264129 | NIC: 767811578v | Branch: BR-KN-001
+FV-KN-017 | undefined | Phone: 0763442629 | NIC: 826785373v | Branch: BR-KN-001
+FV-KN-018 | undefined | Phone: 0778701329 | NIC: 946123978v | Branch: BR-KN-001
+FV-PU-014 | undefined | Phone: 0769241699 | NIC: 946373761v | Branch: BR-PU-001
+FV-KM-015 | undefined | Phone: 0759767784 | NIC: 957103197V | Branch: BR-KM-001
+FV-KN-007 | undefined | Phone: 0774533707 | NIC: 495892174V | Branch: BR-KN-001
+FV-VN-010 | Saheed Fathima | Phone: 0774665757 | NIC: 768572844V | Branch: BR-VN-001
+FV-KA-001 | Dalindan Saliny | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-002 | Perampalarasan Rathika | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-003 | Sasikaran kalaivany | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-004 | Sunmugaraja Sasikala | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-005 | Yokesvaran Abiramy | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-006 | Vadivel Sivasri | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KA-007 | Raveenthirakumar Tharsiny | Phone: 0770000000 | NIC: undefined | Branch: BR-KA-002
+FV-KC-008 | Thevalingam Sakila | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-009 | Jeevananthan Thabojini | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-010 | Sivatharsan Nishanthini | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+FV-KC-011 | Elangeswaran Pakeerathy | Phone: 0770000000 | NIC: undefined | Branch: BR-KC-001
+
+--- Searching User collection for any name matches ---
+
+--- Searching ALL Members (first small batch) for any FV clues ---

@@ -1,0 +1,5 @@
+Migration Log
+=============
+Found 842 members with memberCode
+
+Results: 842 success, 0 skipped, 0 errors.
