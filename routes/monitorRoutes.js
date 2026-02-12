@@ -4,6 +4,11 @@ const { getOnlineUsers, getActivityLogs, getStats } = require('../controllers/mo
 const { protect } = require('../middleware/authMiddleware');
 const { requireRole } = require('../middleware/roleAuth');
 
+// Debug log
+console.log('Monitor Routes Loaded');
+
+router.get('/test', (req, res) => res.send('Monitor Routes Working'));
+
 // All monitoring routes require authentication AND IT/Admin role
 router.use(protect);
 router.use(requireRole('it_sector', 'admin'));
