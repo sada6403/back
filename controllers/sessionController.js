@@ -275,14 +275,6 @@ const logActivity = async (req, res) => {
     }
 };
 
-module.exports = {
-    startSession,
-    pingSession,
-    endSession,
-    logActivity,
-    fixSessionData
-};
-
 /**
  * Fix corrupted session data (missing isOnline field)
  * POST /api/session/fix-data
@@ -328,3 +320,13 @@ const fixSessionData = async (req, res) => {
         });
     }
 };
+
+module.exports = {
+    startSession,
+    pingSession,
+    endSession,
+    logActivity,
+    fixSessionData
+};
+
+

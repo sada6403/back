@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { startSession, pingSession, endSession, logActivity } = require('../controllers/sessionController');
+const { startSession, pingSession, endSession, logActivity, fixSessionData } = require('../controllers/sessionController');
 const { protect } = require('../middleware/authMiddleware');
 
 // All session routes require authentication
@@ -26,6 +26,6 @@ router.post('/end', endSession);
 // @access  Private
 router.post('/log', logActivity);
 
-router.post('/fix-data', protect, sessionController.fixSessionData); // New fix endpoint
+router.post('/fix-data', protect, fixSessionData); // New fix endpoint
 
 module.exports = router;
