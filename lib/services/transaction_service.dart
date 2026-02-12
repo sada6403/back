@@ -70,7 +70,7 @@ class TransactionService {
     }
   }
 
-  static Future<bool> updateTransaction(
+  static Future<String?> updateTransaction(
     String id,
     Map<String, dynamic> data,
   ) async {
@@ -81,10 +81,17 @@ class TransactionService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(data),
       );
-      return response.statusCode == 200;
+      debugPrint('Update Transaction Response: ${response.statusCode}');
+      debugPrint('Update Transaction Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return null; // Success
+      } else {
+        return 'Failed: ${response.statusCode} - ${response.body}';
+      }
     } catch (e) {
       debugPrint('Error updating transaction: $e');
-      return false;
+      return 'Error: $e';
     }
   }
 

@@ -372,40 +372,32 @@ class _TransactionControlScreenState extends State<TransactionControlScreen> {
                     ),
                   ],
                 ),
-            ] else ...[
-              const Divider(height: 32, color: Colors.white10),
-              if (AuthService.role != 'analyzer')
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: () => _editTransaction(tx),
-                      icon: const Icon(
-                        Icons.edit,
-                        size: 18,
-                        color: Colors.blue,
-                      ),
-                      label: Text(
-                        'EDIT',
-                        style: GoogleFonts.outfit(color: Colors.blue[300]),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    TextButton.icon(
-                      onPressed: () => _confirmDelete(tx),
-                      icon: const Icon(
-                        Icons.delete,
-                        size: 18,
-                        color: Colors.red,
-                      ),
-                      label: Text(
-                        'DELETE',
-                        style: GoogleFonts.outfit(color: Colors.red[300]),
-                      ),
-                    ),
-                  ],
-                ),
             ],
+
+            const Divider(height: 32, color: Colors.white10),
+            if (AuthService.role != 'analyzer')
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _editTransaction(tx),
+                    icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                    label: Text(
+                      'EDIT',
+                      style: GoogleFonts.outfit(color: Colors.blue[300]),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  TextButton.icon(
+                    onPressed: () => _confirmDelete(tx),
+                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                    label: Text(
+                      'DELETE',
+                      style: GoogleFonts.outfit(color: Colors.red[300]),
+                    ),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -463,7 +455,7 @@ class _TransactionControlScreenState extends State<TransactionControlScreen> {
     );
 
     if (result == true) {
-      final success = await TransactionService.updateTransaction(tx.id, {
+      final error = await TransactionService.updateTransaction(tx.id, {
         'productName': nameCtrl.text,
         'quantity': double.tryParse(qtyCtrl.text),
         'unitPrice': double.tryParse(priceCtrl.text),
@@ -471,16 +463,23 @@ class _TransactionControlScreenState extends State<TransactionControlScreen> {
       });
 
       if (mounted) {
-        if (success) {
+        if (error == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Transaction updated successfully')),
           );
           _performSearch();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to update transaction'),
-              backgroundColor: Colors.red,
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Update Failed'),
+              content: Text(error),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
             ),
           );
         }
