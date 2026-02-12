@@ -492,55 +492,125 @@ class _AdvancedReportsScreenState extends State<AdvancedReportsScreen>
     final sell = fv['sellAmount'] as num;
     final buy = fv['buyAmount'] as num;
 
+    final List<dynamic> members = fv['members'] ?? [];
+
     return Card(
       color: Colors.white.withValues(alpha: 0.05),
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
-              child: const Icon(Icons.person, color: Colors.blueAccent),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          iconColor: Colors.blueAccent,
+          collapsedIconColor: Colors.white54,
+          title: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
+                child: const Icon(Icons.person, color: Colors.blueAccent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fv['name'],
+                      style: GoogleFonts.outfit(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '${fv['sellCount'] + fv['buyCount']} transactions | ${fv['memberCount'] ?? 0} members',
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    fv['name'],
-                    style: GoogleFonts.outfit(
-                      color: Colors.white,
+                    'Rs. ${NumberFormat('#,###').format(sell)}',
+                    style: const TextStyle(
+                      color: Colors.greenAccent,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    '${fv['sellCount'] + fv['buyCount']} total transactions',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    'Rs. ${NumberFormat('#,###').format(buy)}',
+                    style: const TextStyle(
+                      color: Colors.orangeAccent,
+                      fontSize: 10,
+                    ),
                   ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  'Rs. ${NumberFormat('#,###').format(sell)}',
-                  style: const TextStyle(
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                  ),
+            ],
+          ),
+          children: [
+            if (members.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'No members assigned',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
-                Text(
-                  'Rs. ${NumberFormat('#,###').format(buy)}',
-                  style: const TextStyle(
-                    color: Colors.orangeAccent,
-                    fontSize: 10,
-                  ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-              ],
-            ),
+                width: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(color: Colors.white10),
+                    const Text(
+                      'Assigned Members:',
+                      style: TextStyle(
+                        color: Colors.blueAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: members.map((m) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: Colors.white10,
+                              width: 0.5,
+                            ),
+                          ),
+                          child: Text(
+                            m['name'] ?? 'Unknown',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

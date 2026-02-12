@@ -187,9 +187,11 @@ class ReportService {
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
-            pw.Image(
-              pw.MemoryImage(branchBytes!.buffer.asUint8List()),
-              width: 500,
+            pw.Center(
+              child: pw.Image(
+                pw.MemoryImage(branchBytes!.buffer.asUint8List()),
+                width: 450,
+              ),
             ),
             pw.SizedBox(height: 10),
             _buildBranchTransactionTable(analyticsData['branchTransactions']),
@@ -201,9 +203,11 @@ class ReportService {
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
-            pw.Image(
-              pw.MemoryImage(productBytes!.buffer.asUint8List()),
-              width: 500,
+            pw.Center(
+              child: pw.Image(
+                pw.MemoryImage(productBytes!.buffer.asUint8List()),
+                width: 450,
+              ),
             ),
             pw.SizedBox(height: 10),
             _buildProductAnalysisTable(analyticsData['productAnalysis']),
@@ -215,9 +219,11 @@ class ReportService {
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
-            pw.Image(
-              pw.MemoryImage(memberBytes!.buffer.asUint8List()),
-              width: 500,
+            pw.Center(
+              child: pw.Image(
+                pw.MemoryImage(memberBytes!.buffer.asUint8List()),
+                width: 450,
+              ),
             ),
             pw.SizedBox(height: 10),
             _buildMemberDistributionTable(analyticsData['memberDistribution']),
@@ -623,15 +629,16 @@ class ReportService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
       columnWidths: {
-        0: const pw.FixedColumnWidth(68), // Date
-        1: const pw.FixedColumnWidth(32), // Type
-        2: const pw.FlexColumnWidth(1.3), // Product
-        3: const pw.FlexColumnWidth(1.3), // Farmer
-        4: const pw.FixedColumnWidth(52), // FV ID
-        5: const pw.FixedColumnWidth(32), // Qty
-        6: const pw.FixedColumnWidth(25), // Unit
-        7: const pw.FixedColumnWidth(55), // Unit Price
-        8: const pw.FixedColumnWidth(70), // Amount
+        0: const pw.FixedColumnWidth(65), // Date
+        1: const pw.FixedColumnWidth(30), // Type
+        2: const pw.FixedColumnWidth(55), // Bill No
+        3: const pw.FlexColumnWidth(1.2), // Product
+        4: const pw.FlexColumnWidth(1.2), // Farmer
+        5: const pw.FixedColumnWidth(45), // FV ID
+        6: const pw.FixedColumnWidth(30), // Qty
+        7: const pw.FixedColumnWidth(30), // Unit
+        8: const pw.FixedColumnWidth(55), // Unit Price
+        9: const pw.FixedColumnWidth(65), // Amount
       },
       children: [
         // Header Row
@@ -640,13 +647,14 @@ class ReportService {
           children: [
             _buildTableCell('Date', isHeader: true),
             _buildTableCell('Type', isHeader: true),
+            _buildTableCell('Bill No', isHeader: true),
             _buildTableCell('Product', isHeader: true),
             _buildTableCell('Farmer', isHeader: true),
             _buildTableCell('FV ID', isHeader: true),
             _buildTableCell('Qty', isHeader: true, align: pw.TextAlign.right),
             _buildTableCell('Unit', isHeader: true),
             _buildTableCell(
-              'Unit\nPrice',
+              'Unit Price',
               isHeader: true,
               align: pw.TextAlign.right,
             ),
@@ -663,6 +671,7 @@ class ReportService {
             children: [
               _buildTableCell(dateFormat.format(t.date)),
               _buildTableCell(t.type.toUpperCase()),
+              _buildTableCell(t.billNumber),
               _buildTableCell(t.product),
               _buildTableCell(t.memberName),
               _buildTableCell(t.fvId),
@@ -1134,6 +1143,11 @@ class ReportService {
                       isHeader: true,
                       align: pw.TextAlign.center,
                     ),
+                    _buildTableCell(
+                      'Members',
+                      isHeader: true,
+                      align: pw.TextAlign.center,
+                    ),
                   ],
                 ),
                 ...performanceData.map((p) {
@@ -1152,11 +1166,84 @@ class ReportService {
                         (p['sellCount'] + p['buyCount']).toString(),
                         align: pw.TextAlign.center,
                       ),
+                      _buildTableCell(
+                        (p['memberCount'] ?? 0).toString(),
+                        align: pw.TextAlign.center,
+                      ),
                     ],
                   );
                 }),
               ],
             ),
+            pw.SizedBox(height: 30),
+            pw.Text(
+              'Detailed Assigned Member Lists',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Divider(),
+            pw.SizedBox(height: 10),
+            ...performanceData.map((p) {
+              final List<dynamic> members = p['members'] ?? [];
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.SizedBox(height: 15),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(5),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.grey100,
+                    ),
+                    width: double.infinity,
+                    child: pw.Text(
+                      'FV: ${p['name']} (${p['userId']}) - ${members.length} Members',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  if (members.isEmpty)
+                    pw.Text(
+                      'No members assigned.',
+                      style: const pw.TextStyle(fontSize: 10),
+                    )
+                  else
+                    pw.Table(
+                      border: pw.TableBorder.all(
+                        color: PdfColors.grey300,
+                        width: 0.5,
+                      ),
+                      columnWidths: {
+                        0: const pw.FixedColumnWidth(120), // Name
+                        1: const pw.FixedColumnWidth(80), // ID
+                        2: const pw.FixedColumnWidth(80), // Contact
+                        3: const pw.FlexColumnWidth(), // Address
+                      },
+                      children: [
+                        pw.TableRow(
+                          decoration: const pw.BoxDecoration(
+                            color: PdfColors.grey200,
+                          ),
+                          children: [
+                            _buildTableCell('Member Name', isHeader: true),
+                            _buildTableCell('Member ID', isHeader: true),
+                            _buildTableCell('Contact', isHeader: true),
+                            _buildTableCell('Address', isHeader: true),
+                          ],
+                        ),
+                        ...members.map((m) {
+                          return pw.TableRow(
+                            children: [
+                              _buildTableCell(m['name'] ?? 'N/A'),
+                              _buildTableCell(m['memberId'] ?? 'N/A'),
+                              _buildTableCell(m['contact'] ?? 'N/A'),
+                              _buildTableCell(m['address'] ?? 'N/A'),
+                            ],
+                          );
+                        }),
+                      ],
+                    ),
+                ],
+              );
+            }),
           ];
         },
       ),

@@ -896,14 +896,38 @@ const getFVPerformance = async (req, res) => {
         const fvs = await FieldVisitor.find({ branchId }).select('name userId').lean();
         const fvMap = new Map();
 
+        // Get members for this branch to calculate counts and details
+        const members = await Member.find({ branchId }).select('name memberId contact address fieldVisitorId').lean();
+        const fvMembersMap = new Map();
+
+        members.forEach(m => {
+            const fvId = m.fieldVisitorId?.toString();
+            if (fvId) {
+                if (!fvMembersMap.has(fvId)) {
+                    fvMembersMap.set(fvId, []);
+                }
+                fvMembersMap.get(fvId).push({
+                    name: m.name,
+                    memberId: m.memberId,
+                    contact: m.contact,
+                    address: m.address
+                });
+            }
+        });
+
         fvs.forEach(fv => {
-            fvMap.set(fv._id.toString(), {
+            const fvId = fv._id.toString();
+            const fvMembers = fvMembersMap.get(fvId) || [];
+            fvMap.set(fvId, {
+                id: fv._id,
                 name: fv.name || fv.userId,
                 userId: fv.userId,
                 buyAmount: 0,
                 sellAmount: 0,
                 buyCount: 0,
-                sellCount: 0
+                sellCount: 0,
+                memberCount: fvMembers.length,
+                members: fvMembers
             });
         });
 
