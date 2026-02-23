@@ -16,20 +16,13 @@ void main() async {
     // Initialize services that need local storage
     await AuthService.init(); // Restore auth state
 
-    // Check and migrate API URL if needed
+    // ALWAYS use the latest hardcoded URL from api_config.dart.
+    // This ensures any IP changes in code are immediately picked up.
     final prefs = await SharedPreferences.getInstance();
-    String? savedUrl = prefs.getString('api_base_url');
-
-    // If the saved URL is local and code default is remote, force migration
-    if (savedUrl != null &&
-        (savedUrl.contains('localhost') || savedUrl.contains('10.0.2.2')) &&
-        !ApiConfig.baseUrl.contains('localhost')) {
-      debugPrint('Migrating from local to remote: ${ApiConfig.baseUrl}');
-      await prefs.setString('api_base_url', ApiConfig.baseUrl);
-      ApiConfig.setBaseUrl(ApiConfig.baseUrl);
-    } else if (savedUrl != null) {
-      ApiConfig.setBaseUrl(savedUrl);
-    }
+    final hardcodedUrl = ApiConfig.baseUrl;
+    await prefs.setString('api_base_url', hardcodedUrl);
+    ApiConfig.setBaseUrl(hardcodedUrl);
+    debugPrint('[Config] Base URL set to: $hardcodedUrl');
 
     await SessionService.init(); // Auto-start session if logged in
     await AuditService.init(); // Load audit logs
