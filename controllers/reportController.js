@@ -386,6 +386,10 @@ const getDashboardStats = async (req, res) => {
             userId = new mongoose.Types.ObjectId(userId);
         }
 
+        const itRoles = ['it_sector', 'admin', 'it', 'analyzer'];
+        const userRole = req.user?.role || '';
+        const isIT = itRoles.includes(userRole);
+
         // Get current month's date range
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -397,8 +401,8 @@ const getDashboardStats = async (req, res) => {
             date: { $gte: startOfMonth, $lte: endOfMonth }
         };
 
-        // If not manager, only show their own transactions
-        if (!isManager) {
+        // If not manager or IT, only show their own transactions
+        if (!isManager && !isIT) {
             txFilter.fieldVisitorId = userId;
         }
 
@@ -426,7 +430,7 @@ const getDashboardStats = async (req, res) => {
 
         // Get total members count
         const memberFilter = { branchId };
-        if (!isManager) {
+        if (!isManager && !isIT) {
             memberFilter.fieldVisitorId = userId;
         }
 
@@ -434,7 +438,7 @@ const getDashboardStats = async (req, res) => {
 
         // Get recent transactions
         const recentTxFilter = { branchId };
-        if (!isManager) {
+        if (!isManager && !isIT) {
             recentTxFilter.fieldVisitorId = userId;
         }
         const transactions = await Transaction.find(recentTxFilter)
@@ -444,7 +448,7 @@ const getDashboardStats = async (req, res) => {
             .lean();
 
         // Get notifications
-        const notificationFilter = isManager ? { branchId } : { fieldVisitorId: userId };
+        const notificationFilter = (isManager || isIT) ? { branchId } : { fieldVisitorId: userId };
         const notifications = await Notification.find(notificationFilter)
             .sort({ date: -1 })
             .limit(10)

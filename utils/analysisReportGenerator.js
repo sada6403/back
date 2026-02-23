@@ -51,7 +51,17 @@ const generateAnalysisReport = (sessions, activities, filters = {}) => {
             const headerY = 45;
             const leftX = 110;
 
-            doc.fillColor(black).fontSize(18).font('Helvetica-Bold').text('Nature Farming - IT Sector', leftX, headerY);
+            let roleTitle = 'IT Sector';
+            if (sessions && sessions.length > 0) {
+                roleTitle = sessions[0].role || 'IT Sector';
+            } else if (activities && activities.length > 0) {
+                roleTitle = activities[0].role || 'IT Sector';
+            }
+
+            // Normalize role title for display
+            roleTitle = roleTitle.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+            doc.fillColor(black).fontSize(18).font('Helvetica-Bold').text(`Nature Farming - ${roleTitle}`, leftX, headerY);
             doc.fontSize(10).font('Helvetica')
                 .text('System Usage & Activity Report', leftX, headerY + 22)
                 .text(`Generated: ${moment().tz('Asia/Colombo').format('MMM DD, YYYY hh:mm A')}`, leftX, headerY + 37);
