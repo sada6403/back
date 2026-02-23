@@ -1,0 +1,22 @@
+--- Inspecting Branch Managers ---
+Found 17 Branch Managers.
+BM: undefined, Branch Name: 'Jaffna', Branch ID: 'BR-JA-001'
+BM: undefined, Branch Name: 'jaffna', Branch ID: 'BR-JA-002'
+BM: undefined, Branch Name: 'Kilinochchi', Branch ID: 'BR-KN-001'
+BM: undefined, Branch Name: 'Puthukkudiyiruppu', Branch ID: 'BR-PU-001'
+BM: undefined, Branch Name: 'Mulliyawalai', Branch ID: 'BR-MW-001'
+BM: undefined, Branch Name: 'Mallavi', Branch ID: 'BR-MV-001'
+BM: undefined, Branch Name: 'Nedunkeny', Branch ID: 'BR-NE-001'
+BM: undefined, Branch Name: 'Thirunelvelly', Branch ID: 'BR-TH-001'
+BM: undefined, Branch Name: 'Karachchi', Branch ID: 'BR-KC-001'
+BM: undefined, Branch Name: 'Palai', Branch ID: 'BR-PA-001'
+BM: undefined, Branch Name: 'Kandawalai', Branch ID: 'BR-KA-002'
+BM: undefined, Branch Name: 'Vavuniya', Branch ID: 'BR-VN-001'
+BM: undefined, Branch Name: 'Akkaraipattu', Branch ID: 'BR-AK-001'
+BM: undefined, Branch Name: 'Ampara', Branch ID: 'BR-AM-001'
+BM: undefined, Branch Name: 'Cheddikulam', Branch ID: 'BR-CK-001'
+BM: undefined, Branch Name: 'Kalmunai', Branch ID: 'BR-KM-001'
+BM: undefined, Branch Name: 'Mannar', Branch ID: 'BR-MN-001'
+
+Searching for 'Kalmunai': Found 1
+ - ID: 6975b962967fe80887148319, BranchID: BR-KM-001, BranchName: Kalmunai

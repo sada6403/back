@@ -1,0 +1,12 @@
+--- Inspecting Data ---
+Found 3 FVs.
+FV: bdhsbs (ID: 697715832f5c5781b4bc2653, Branch: BR-JA-001)
+  -> Count (ObjectId): 0
+FV: Rasarathinam Sutharsini (ID: 697838232f5c5781b4bc276e, Branch: BR-KM-001)
+  -> Count (ObjectId): 39
+  -> Sample Members Branch IDs: BR-KM-001, BR-KM-001, BR-KM-001
+  -> Branch IDs match.
+FV: JHON RAMALINGAM (ID: 6978bcb12f5c5781b4bc27fb, Branch: BR-JA-001)
+  -> Count (ObjectId): 1
+  -> Sample Members Branch IDs: BR-JA-001
+  -> Branch IDs match.
