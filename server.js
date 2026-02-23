@@ -63,11 +63,23 @@ try {
     console.log('Mounting /api/monitor routes...'); // Debug log
 
     // API Ping (Diagnostic)
-    app.get('/api/ping', (req, res) => res.json({
-        success: true,
-        message: 'Backend is live and updated',
-        time: new Date().toISOString()
-    }));
+    app.get('/api/ping', async (req, res) => {
+        try {
+            const Transaction = require('./models/Transaction');
+            const count = await Transaction.countDocuments();
+            res.json({
+                success: true,
+                message: 'Backend is live and updated',
+                time: new Date().toISOString(),
+                stats: {
+                    totalTransactions: count,
+                    dbName: mongoose.connection.name
+                }
+            });
+        } catch (err) {
+            res.json({ success: false, error: err.message });
+        }
+    });
 
     app.get('/', (req, res) => res.send('API Running'));
 
