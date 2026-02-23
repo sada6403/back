@@ -213,9 +213,9 @@ const getTransactions = async (req, res) => {
 
         if (!isIT) {
             // Restriction for normal users
-            if (userBranchId) {
+            if (userBranchId && userBranchId !== 'All') {
                 query.branchId = userBranchId;
-            } else if (effectiveBranchId) {
+            } else if (effectiveBranchId && effectiveBranchId !== 'All') {
                 query.branchId = effectiveBranchId;
             }
         } else if (effectiveBranchId && effectiveBranchId !== 'All') {

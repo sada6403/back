@@ -51,7 +51,7 @@ const protect = async (req, res, next) => {
 
             // Attach branchId (prefer token payload, fallback to user document)
             req.user.branchId = decoded.branchId || req.user?.branchId || 'default-branch';
-            console.log('Authenticated user:', req.user.userId || req.user.email);
+            console.log(`[Auth] User: ${req.user.userId || req.user.email}, Role: ${req.user.role}, BranchId: ${req.user.branchId}`);
 
             next();
         } catch (error) {
