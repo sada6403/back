@@ -218,7 +218,7 @@ const getTransactions = async (req, res) => {
             } else if (effectiveBranchId) {
                 query.branchId = effectiveBranchId;
             }
-        } else if (effectiveBranchId) {
+        } else if (effectiveBranchId && effectiveBranchId !== 'All') {
             // IT can optionally filter by branch
             query.branchId = effectiveBranchId;
         }
@@ -278,8 +278,10 @@ const downloadBill = async (req, res) => {
         }
 
         // Check if user has access to this transaction
-        const branchId = req.user?.branchId || 'default-branch';
-        if (transaction.branchId !== branchId) {
+        const userBranchId = req.user?.branchId || 'default-branch';
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
+
+        if (!isIT && transaction.branchId !== userBranchId) {
             return res.status(403).json({ success: false, message: 'Access denied to this transaction' });
         }
 
