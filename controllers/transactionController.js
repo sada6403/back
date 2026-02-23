@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const Transaction = require('../models/Transaction');
 const Member = require('../models/Member');
@@ -6,6 +8,13 @@ const BranchManager = require('../models/BranchManager');
 const Notification = require('../models/Notification');
 const Product = require('../models/Product');
 const { generateBillPDF } = require('../utils/pdfGenerator');
+
+const debugLog = (msg) => {
+    const logPath = path.join(__dirname, '../debug_report.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
+    console.log(`[DEBUG] ${msg}`);
+};
 
 // Generate Bill Number
 const generateBillNumber = async (type) => {
@@ -192,14 +201,19 @@ const createTransaction = async (req, res) => {
 const getTransactions = async (req, res) => {
     try {
         const { memberId, type, fieldVisitorId, startDate, endDate, billNumber, branchId: queryBranchId } = req.query;
-        // If logged in, use user's branch. If not (Management IT), use query param or show all/default.
         const userBranchId = req.user?.branchId;
-        const userRole = req.user?.role;
+        const rawRole = req.user?.role || '';
+        const userRole = rawRole.toString().toLowerCase().trim().replace(/_/g, '');
+
+        debugLog(`getTransactions request by User: ${req.user?.userId || req.user?.email}, Role: ${rawRole} (Normalized: ${userRole}), BranchId: ${userBranchId}`);
 
         const query = {};
 
-        // IT Sector, Admin, and Analyzer can see all branches. Others are restricted to their own.
-        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
+        // Normalizing roles for check: it, itsector, admin, analyzer
+        const itRoles = ['it_sector', 'admin', 'it', 'analyzer', 'itsector', 'it_sector'];
+        const isIT = itRoles.includes(userRole) || itRoles.includes(rawRole.toLowerCase());
+
+        debugLog(`Is IT Role: ${isIT}`);
 
         let effectiveBranchId = queryBranchId;
         if (effectiveBranchId && effectiveBranchId !== 'All') {
@@ -213,15 +227,17 @@ const getTransactions = async (req, res) => {
 
         if (!isIT) {
             // Restriction for normal users
-            if (userBranchId && userBranchId !== 'All') {
+            if (userBranchId && userBranchId.toLowerCase() !== 'all') {
                 query.branchId = userBranchId;
-            } else if (effectiveBranchId && effectiveBranchId !== 'All') {
+            } else if (effectiveBranchId && effectiveBranchId.toLowerCase() !== 'all') {
                 query.branchId = effectiveBranchId;
             }
-        } else if (effectiveBranchId && effectiveBranchId !== 'All') {
+        } else if (effectiveBranchId && effectiveBranchId.toLowerCase() !== 'all') {
             // IT can optionally filter by branch
             query.branchId = effectiveBranchId;
         }
+
+        debugLog(`Final Mongoose Query: ${JSON.stringify(query)}`);
 
         if (memberId) query.memberId = memberId;
         if (fieldVisitorId) query.fieldVisitorId = fieldVisitorId;
