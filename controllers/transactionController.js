@@ -198,8 +198,8 @@ const getTransactions = async (req, res) => {
 
         const query = {};
 
-        // IT Sector and Admin can see all branches. Others are restricted to their own.
-        const isIT = ['it_sector', 'admin', 'it'].includes(userRole);
+        // IT Sector, Admin, and Analyzer can see all branches. Others are restricted to their own.
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
 
         let effectiveBranchId = queryBranchId;
         if (effectiveBranchId && effectiveBranchId !== 'All') {
