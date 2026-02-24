@@ -9,9 +9,9 @@ console.log('Monitor Routes Loaded');
 
 router.get('/test', (req, res) => res.send('Monitor Routes Working'));
 
-// All monitoring routes require authentication AND IT/Admin role
+// All monitoring routes require authentication AND IT/Admin/Analyzer role
 router.use(protect);
-router.use(requireRole('it_sector', 'admin'));
+router.use(requireRole('it_sector', 'admin', 'analyzer'));
 
 // @route   GET /api/monitor/online-users
 // @desc    Get list of currently online users

@@ -198,8 +198,8 @@ const getTransactions = async (req, res) => {
 
         const query = {};
 
-        // IT Sector and Admin can see all branches. Others are restricted to their own.
-        const isIT = ['it_sector', 'admin', 'it'].includes(userRole);
+        // IT Sector, Admin, and Analyzer can see all branches. Others are restricted to their own.
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
 
         let effectiveBranchId = queryBranchId;
         if (effectiveBranchId && effectiveBranchId !== 'All') {
@@ -215,11 +215,11 @@ const getTransactions = async (req, res) => {
             // Restriction for normal users
             if (userBranchId) {
                 query.branchId = userBranchId;
-            } else if (effectiveBranchId) {
+            } else if (effectiveBranchId && effectiveBranchId !== 'All') {
                 query.branchId = effectiveBranchId;
             }
-        } else if (effectiveBranchId) {
-            // IT can optionally filter by branch
+        } else if (effectiveBranchId && effectiveBranchId !== 'All') {
+            // IT/Analyzer can optionally filter by branch if not set to 'All'
             query.branchId = effectiveBranchId;
         }
 

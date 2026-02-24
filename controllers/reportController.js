@@ -12,17 +12,23 @@ const branchFilter = (user) => ({ branchId: user.branchId || 'default-branch' })
 // @route GET /api/reports/manager-dashboard
 const getManagerDashboard = async (req, res) => {
     try {
-        const branchId = req.user?.branchId || 'default-branch';
+        let branchId = req.user?.branchId || 'default-branch';
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(req.user?.role);
+
+        if (isIT && branchId === 'All') {
+            branchId = null; // Don't filter by branch for IT
+        }
+
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
         // Pull all field visitors for the branch
-        const fieldVisitors = await FieldVisitor.find({ branchId }).lean();
+        const fieldVisitors = await FieldVisitor.find(branchId ? { branchId } : {}).lean();
 
         // Contribution per field visitor from current month transactions
         const contributions = await Transaction.aggregate([
-            { $match: { branchId, date: { $gte: startOfMonth, $lte: endOfMonth } } },
+            { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfMonth, $lte: endOfMonth } } },
             {
                 $group: {
                     _id: '$fieldVisitorId',
@@ -34,7 +40,7 @@ const getManagerDashboard = async (req, res) => {
 
         // Member counts per field visitor
         const memberCounts = await Member.aggregate([
-            { $match: { branchId } },
+            { $match: { ...(branchId ? { branchId } : {}) } },
             { $group: { _id: '$fieldVisitorId', memberCount: { $sum: 1 } } }
         ]);
 
@@ -74,7 +80,7 @@ const getManagerDashboard = async (req, res) => {
         const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
 
         const monthlyData = await Transaction.aggregate([
-            { $match: { branchId, date: { $gte: startOfYear, $lte: endOfYear } } },
+            { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfYear, $lte: endOfYear } } },
             {
                 $group: {
                     _id: { month: { $month: '$date' }, type: '$type' },
@@ -379,16 +385,8 @@ const getYearlyAnalysis = async (req, res) => {
 const getDashboardStats = async (req, res) => {
     try {
         const branchId = req.user?.branchId || 'default-branch';
-        const isManager = req.user?.role === 'manager';
-        let userId = req.user?._id;
-
-        if (userId && !isManager) {
-            userId = new mongoose.Types.ObjectId(userId);
-        }
-
-        const itRoles = ['it_sector', 'admin', 'it', 'analyzer'];
-        const userRole = req.user?.role || '';
-        const isIT = itRoles.includes(userRole);
+        const isITRole = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
+        const isManager = req.user?.role === 'manager' || isITRole;
 
         // Get current month's date range
         const now = new Date();
@@ -397,9 +395,17 @@ const getDashboardStats = async (req, res) => {
 
         // Build transaction filter
         const txFilter = {
-            branchId,
             date: { $gte: startOfMonth, $lte: endOfMonth }
         };
+
+        if (branchId && branchId !== 'All') {
+            txFilter.branchId = branchId;
+        }
+
+        // If not manager or IT, only show their own transactions
+        if (!isManager) {
+            txFilter.fieldVisitorId = userId;
+        }
 
         // If not manager or IT, only show their own transactions
         if (!isManager && !isIT) {
@@ -429,7 +435,10 @@ const getDashboardStats = async (req, res) => {
         });
 
         // Get total members count
-        const memberFilter = { branchId };
+        const memberFilter = {};
+        if (branchId && branchId !== 'All') {
+            memberFilter.branchId = branchId;
+        }
         if (!isManager && !isIT) {
             memberFilter.fieldVisitorId = userId;
         }
@@ -437,7 +446,10 @@ const getDashboardStats = async (req, res) => {
         const totalMembers = await Member.countDocuments(memberFilter);
 
         // Get recent transactions
-        const recentTxFilter = { branchId };
+        const recentTxFilter = {};
+        if (branchId && branchId !== 'All') {
+            recentTxFilter.branchId = branchId;
+        }
         if (!isManager && !isIT) {
             recentTxFilter.fieldVisitorId = userId;
         }
@@ -448,7 +460,14 @@ const getDashboardStats = async (req, res) => {
             .lean();
 
         // Get notifications
-        const notificationFilter = (isManager || isIT) ? { branchId } : { fieldVisitorId: userId };
+        // Get notifications
+        let notificationFilter = { fieldVisitorId: userId };
+        if (isManager || isIT) {
+            notificationFilter = {};
+            if (branchId && branchId !== 'All') {
+                notificationFilter.branchId = branchId;
+            }
+        }
         const notifications = await Notification.find(notificationFilter)
             .sort({ date: -1 })
             .limit(10)
@@ -456,10 +475,10 @@ const getDashboardStats = async (req, res) => {
 
         // Stats for pie charts (by quantity)
         // If not manager, strictly filter pie data to this user (hide 'Others')
-        const pieMatch = {
-            branchId,
-            // date: { $gte: startOfMonth, $lte: endOfMonth }
-        };
+        const pieMatch = {};
+        if (branchId && branchId !== 'All') {
+            pieMatch.branchId = branchId;
+        }
 
         // Date matching for strict current month filtering (matching memberController logic)
         const currentYear = now.getFullYear();
@@ -533,14 +552,15 @@ const getDashboardStats = async (req, res) => {
             }
         });
 
-        // If manager, we also want the list of field visitors for the dashboard
+        // If manager or IT, we also want the list of field visitors for the dashboard
         let fieldVisitors = [];
-        if (isManager) {
-            const fvs = await FieldVisitor.find({ branchId }).lean();
+        if (isManager || isIT) {
+            const fvSearchMatch = (branchId && branchId !== 'All') ? { branchId } : {};
+            const fvs = await FieldVisitor.find(fvSearchMatch).lean();
 
             // Get stats per FV
             const fvStats = await Transaction.aggregate([
-                { $match: { branchId, date: { $gte: startOfMonth, $lte: endOfMonth } } },
+                { $match: { ...fvSearchMatch, date: { $gte: startOfMonth, $lte: endOfMonth } } },
                 {
                     $group: {
                         _id: '$fieldVisitorId',
@@ -551,7 +571,7 @@ const getDashboardStats = async (req, res) => {
             ]);
 
             const fvMemberCounts = await Member.aggregate([
-                { $match: { branchId } },
+                { $match: fvSearchMatch },
                 { $group: { _id: '$fieldVisitorId', count: { $sum: 1 } } }
             ]);
 
@@ -577,10 +597,11 @@ const getDashboardStats = async (req, res) => {
             });
         }
 
-        // Get count of all transactions for this month/year for the branch (for managers)
+        // Get count of all transactions for this month/year for the branch (for managers/IT)
         let totalTransactionsCount = 0;
-        if (isManager) {
-            totalTransactionsCount = await Transaction.countDocuments({ branchId });
+        if (isManager || isIT) {
+            const countMatch = (branchId && branchId !== 'All') ? { branchId } : {};
+            totalTransactionsCount = await Transaction.countDocuments(countMatch);
         } else {
             totalTransactionsCount = await Transaction.countDocuments({ fieldVisitorId: userId });
         }

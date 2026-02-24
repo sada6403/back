@@ -210,8 +210,8 @@ const getTransactions = async (req, res) => {
         const query = {};
 
         // Normalizing roles for check: it, itsector, admin, analyzer
-        const itRoles = ['it_sector', 'admin', 'it', 'analyzer', 'itsector', 'it_sector'];
-        const isIT = itRoles.includes(userRole) || itRoles.includes(rawRole.toLowerCase());
+        // IT Sector, Admin, and Analyzer can see all branches. Others are restricted to their own.
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer', 'itsector'].includes(userRole);
 
         debugLog(`Is IT Role: ${isIT}`);
 
@@ -227,13 +227,13 @@ const getTransactions = async (req, res) => {
 
         if (!isIT) {
             // Restriction for normal users
-            if (userBranchId && userBranchId.toLowerCase() !== 'all') {
+            if (userBranchId) {
                 query.branchId = userBranchId;
-            } else if (effectiveBranchId && effectiveBranchId.toLowerCase() !== 'all') {
+            } else if (effectiveBranchId && effectiveBranchId !== 'All') {
                 query.branchId = effectiveBranchId;
             }
-        } else if (effectiveBranchId && effectiveBranchId.toLowerCase() !== 'all') {
-            // IT can optionally filter by branch
+        } else if (effectiveBranchId && effectiveBranchId !== 'All') {
+            // IT/Analyzer can optionally filter by branch if not set to 'All'
             query.branchId = effectiveBranchId;
         }
 

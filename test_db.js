@@ -1,13 +1,20 @@
+require('dotenv').config();
 const mongoose = require('mongoose');
-const uri = 'mongodb+srv://cst23071_db_user:vgquPlo0tLETMjvK@cluster0.s8fljgu.mongodb.net/nf-farming?retryWrites=true&w=majority';
 
-console.log('Connecting...');
-mongoose.connect(uri)
-    .then(() => {
-        console.log('DB CONNECTED SUCCESSFULLY');
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(async () => {
+        const count = await mongoose.connection.collection('transactions').countDocuments({});
+        console.log('Total transactions in AWS DB:', count);
+
+        const recent = await mongoose.connection.collection('transactions').findOne({}, { sort: { date: -1 } });
+        if (recent) {
+            console.log('Latest Transaction Date:', recent.date);
+        } else {
+            console.log('No transactions found in the database.');
+        }
         process.exit(0);
     })
-    .catch(e => {
-        console.error('DB CONNECTION FAILED:', e.message);
+    .catch(err => {
+        console.error('Error connecting to DB:', err);
         process.exit(1);
     });

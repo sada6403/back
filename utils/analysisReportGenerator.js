@@ -85,80 +85,117 @@ const generateAnalysisReport = (sessions, activities, filters = {}) => {
             doc.fillColor(primaryColor).fontSize(14).font('Helvetica-Bold').text('Login Sessions', 40, doc.y);
             doc.moveDown(0.5);
 
-            const tableTop = doc.y;
+            let tableTop = doc.y;
             const userColX = 40;
             const loginColX = 180;
             const logoutColX = 330;
             const durationColX = 480;
 
-            // Bar
-            doc.rect(40, tableTop, 515, 20).fill(primaryColor);
-            doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
-            doc.text('USER', userColX + 5, tableTop + 6);
-            doc.text('LOGIN TIME', loginColX + 5, tableTop + 6);
-            doc.text('LOGOUT TIME', logoutColX + 5, tableTop + 6);
-            doc.text('DURATION', durationColX + 5, tableTop + 6);
+            const drawSessionHeader = (y) => {
+                doc.rect(40, y, 515, 20).fill(primaryColor);
+                doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
+                doc.text('USER', userColX + 5, y + 6);
+                doc.text('LOGIN TIME', loginColX + 5, y + 6);
+                doc.text('LOGOUT TIME', logoutColX + 5, y + 6);
+                doc.text('DURATION', durationColX + 5, y + 6);
+            };
+
+            drawSessionHeader(tableTop);
 
             let rowY = tableTop + 20;
-            doc.fillColor(black).font('Helvetica').fontSize(8);
 
-            sessions.forEach((s, i) => {
-                if (rowY > 700) { doc.addPage(); rowY = 40; }
+            if (sessions && sessions.length > 0) {
+                sessions.forEach((s, i) => {
+                    if (rowY > 750) {
+                        doc.addPage();
+                        tableTop = 40;
+                        drawSessionHeader(tableTop);
+                        rowY = tableTop + 20;
+                    }
 
-                const loginStr = moment(s.loginTime).tz('Asia/Colombo').format('MMM DD, hh:mm A');
-                const logoutStr = s.logoutTime ? moment(s.logoutTime).tz('Asia/Colombo').format('MMM DD, hh:mm A') : 'Active';
-                const durationStr = formatDuration(s.loginTime, s.logoutTime);
+                    const loginStr = moment(s.loginTime).tz('Asia/Colombo').format('MMM DD, hh:mm A');
+                    const logoutStr = s.logoutTime ? moment(s.logoutTime).tz('Asia/Colombo').format('MMM DD, hh:mm A') : 'Active';
+                    const durationStr = formatDuration(s.loginTime, s.logoutTime);
 
-                doc.text(s.username || s.userId, userColX + 5, rowY + 6, { width: 130 });
-                doc.text(loginStr, loginColX + 5, rowY + 6);
-                doc.text(logoutStr, logoutColX + 5, rowY + 6);
-                doc.text(durationStr, durationColX + 5, rowY + 6);
+                    doc.rect(40, rowY, 515, 18).strokeColor('#EEEEEE').stroke();
+                    doc.fillColor(black).font('Helvetica').fontSize(8);
+                    doc.text(s.username || s.userId, userColX + 5, rowY + 5, { width: 130 });
+                    doc.text(loginStr, loginColX + 5, rowY + 5);
+                    doc.text(logoutStr, logoutColX + 5, rowY + 5);
+                    doc.text(durationStr, durationColX + 5, rowY + 5);
 
+                    rowY += 18;
+                });
+            } else {
                 doc.rect(40, rowY, 515, 18).strokeColor('#EEEEEE').stroke();
+                doc.fillColor(grey).font('Helvetica').fontSize(8);
+                doc.text('No login sessions found for the given criteria.', userColX + 5, rowY + 5);
                 rowY += 18;
-            });
+            }
 
+            doc.y = rowY;
             doc.moveDown(3);
 
             // 4. Activity Log Table
-            if (doc.y > 600) doc.addPage();
+            if (doc.y > 700) doc.addPage();
 
             doc.fillColor(primaryColor).fontSize(14).font('Helvetica-Bold').text('Activity Logs', 40, doc.y);
             doc.moveDown(0.5);
 
-            const ActTableTop = doc.y;
+            let ActTableTop = doc.y;
             const ActUserColX = 40;
             const ActionColX = 140;
             const DetailsColX = 240;
             const TimeColX = 480;
 
-            doc.rect(40, ActTableTop, 515, 20).fill(primaryColor);
-            doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
-            doc.text('USER', ActUserColX + 5, ActTableTop + 6);
-            doc.text('ACTION', ActionColX + 5, ActTableTop + 6);
-            doc.text('DETAILS', DetailsColX + 5, ActTableTop + 6);
-            doc.text('TIME', TimeColX + 5, ActTableTop + 6);
+            const drawActivityHeader = (y) => {
+                doc.rect(40, y, 515, 20).fill(primaryColor);
+                doc.fillColor(white).fontSize(9).font('Helvetica-Bold');
+                doc.text('USER', ActUserColX + 5, y + 6);
+                doc.text('ACTION', ActionColX + 5, y + 6);
+                doc.text('DETAILS', DetailsColX + 5, y + 6);
+                doc.text('TIME', TimeColX + 5, y + 6);
+            };
+
+            drawActivityHeader(ActTableTop);
 
             let actRowY = ActTableTop + 20;
-            doc.fillColor(black).font('Helvetica').fontSize(8);
 
-            activities.forEach((a, i) => {
-                if (actRowY > 700) { doc.addPage(); actRowY = 40; }
+            if (activities && activities.length > 0) {
+                activities.forEach((a, i) => {
+                    // Estimate row height based on details string length (approx 45 chars per line)
+                    const detailsStr = a.details || '';
+                    const estimatedLines = Math.ceil(detailsStr.length / 45) || 1;
+                    const rowHeight = Math.max(18, estimatedLines * 12 + 6);
 
-                const timeStr = moment(a.timestamp).tz('Asia/Colombo').format('hh:mm:ss A');
+                    if (actRowY + rowHeight > 750) {
+                        doc.addPage();
+                        ActTableTop = 40;
+                        drawActivityHeader(ActTableTop);
+                        actRowY = ActTableTop + 20;
+                    }
 
-                doc.text(a.username || a.userId, ActUserColX + 5, actRowY + 6, { width: 95 });
-                doc.text(a.action || '', ActionColX + 5, actRowY + 6, { width: 95 });
-                doc.text(a.details || '', DetailsColX + 5, actRowY + 6, { width: 230 });
-                doc.text(timeStr, TimeColX + 5, actRowY + 6);
+                    const timeStr = moment(a.timestamp).tz('Asia/Colombo').format('hh:mm:ss A');
 
+                    doc.rect(40, actRowY, 515, rowHeight).strokeColor('#EEEEEE').stroke();
+                    doc.fillColor(black).font('Helvetica').fontSize(8);
+                    doc.text(a.username || a.userId, ActUserColX + 5, actRowY + 5, { width: 95 });
+                    doc.text(a.action || '', ActionColX + 5, actRowY + 5, { width: 95 });
+                    doc.text(detailsStr, DetailsColX + 5, actRowY + 5, { width: 230 });
+                    doc.text(timeStr, TimeColX + 5, actRowY + 5);
+
+                    actRowY += rowHeight;
+                });
+            } else {
                 doc.rect(40, actRowY, 515, 18).strokeColor('#EEEEEE').stroke();
+                doc.fillColor(grey).font('Helvetica').fontSize(8);
+                doc.text('No activity logs found for the given criteria.', ActUserColX + 5, actRowY + 5);
                 actRowY += 18;
-            });
+            }
 
             // Branding Footer
             doc.fillColor(grey).fontSize(8).font('Helvetica-Oblique')
-                .text('Generated by NatureFarming Management System', 0, 800, { align: 'center' });
+                .text('Generated by NatureFarming Management System', 40, doc.page.height - 40, { align: 'center', width: doc.page.width - 80 });
 
             doc.end();
 

@@ -8,12 +8,12 @@ router.use(protect);
 router.use(enforceRBAC);
 
 router.route('/')
-    .post(authorize('field_visitor', 'it_sector', 'manager'), registerMember)
+    .post(authorize('field_visitor', 'it_sector', 'manager', 'analyzer'), registerMember)
     .get(getMembers);
 
 router.route('/:id')
-    .put(authorize('manager', 'it_sector'), updateMember)
-    .delete(authorize('manager', 'it_sector'), deleteMember);
+    .put(authorize('manager', 'it_sector', 'analyzer'), updateMember)
+    .delete(authorize('manager', 'it_sector', 'analyzer'), deleteMember);
 
 router.post('/import', importMembers);
 

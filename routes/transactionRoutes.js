@@ -15,14 +15,14 @@ router.route('/')
     .get(protect, getTransactions);
 
 // Update status (Admin/Manager/IT)
-router.patch('/:id', protect, authorize('manager', 'admin', 'it_sector'), updateTransactionStatus);
+router.patch('/:id', protect, authorize('manager', 'admin', 'it_sector', 'analyzer'), updateTransactionStatus);
 
 // Full update and Delete (Admin/Manager/IT)
 router.route('/:id')
-    .put(protect, authorize('manager', 'admin', 'it_sector'), updateTransaction)
-    .delete(protect, authorize('manager', 'admin', 'it_sector'), deleteTransaction);
+    .put(protect, authorize('manager', 'admin', 'it_sector', 'analyzer'), updateTransaction)
+    .delete(protect, authorize('manager', 'admin', 'it_sector', 'analyzer'), deleteTransaction);
 
 // Download bill and create notification
-router.get('/:id/download-bill', protect, authorize('manager', 'field_visitor'), downloadBill);
+router.get('/:id/download-bill', protect, authorize('manager', 'field_visitor', 'it_sector', 'analyzer'), downloadBill);
 
 module.exports = router;

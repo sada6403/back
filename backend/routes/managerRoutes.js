@@ -4,7 +4,7 @@ const { getManagers, updateManager, deleteManager } = require('../controllers/ma
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 router.route('/')
-    .get(protect, authorize('manager', 'it_sector'), getManagers);
+    .get(protect, authorize('manager', 'it_sector', 'analyzer'), getManagers);
 
 router.route('/:id')
     .put(protect, authorize('manager', 'it_sector'), updateManager)

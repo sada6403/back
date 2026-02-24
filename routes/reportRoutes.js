@@ -15,17 +15,17 @@ const { getVisualAnalytics } = require('../controllers/visualAnalyticsController
 const { protect, authorize } = require('../middleware/authMiddleware');
 
 // Manager view: branch summary + FV contributions
-router.get('/manager-dashboard', protect, authorize('manager', 'analyzer'), getManagerDashboard);
+router.get('/manager-dashboard', protect, authorize('manager', 'analyzer', 'it_sector'), getManagerDashboard);
 
 // Field visitor view: own totals + notifications + notes
-router.get('/field-visitor-dashboard', protect, authorize('field_visitor', 'analyzer'), getFieldVisitorDashboard);
+router.get('/field-visitor-dashboard', protect, authorize('field_visitor', 'analyzer', 'it_sector'), getFieldVisitorDashboard);
 
 // Dashboard stats: accurate numbers for UI
 router.get('/dashboard-stats', protect, getDashboardStats);
 
 // Backward-compatible single dashboard endpoint that routes by role
 router.get('/dashboard', protect, (req, res, next) => {
-	if (req.user?.role === 'manager' || req.user?.role === 'analyzer') {
+	if (req.user?.role === 'manager' || req.user?.role === 'analyzer' || req.user?.role === 'it_sector') {
 		return getManagerDashboard(req, res, next);
 	}
 	if (req.user?.role === 'field_visitor') {

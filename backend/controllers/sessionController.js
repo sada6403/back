@@ -19,7 +19,7 @@ const startSession = async (req, res) => {
         const ipAddress = req.ip || req.connection.remoteAddress;
         const sessionToken = req.headers.authorization?.replace('Bearer ', '');
 
-        // Check for existing active session with same userId and deviceId
+        console.log(`[SessionController] startSession: Searching for active session userId=${userId}, deviceId=${deviceId}`);
         const existingSession = await UserSession.findOne({
             userId,
             deviceId,
@@ -145,6 +145,14 @@ const pingSession = async (req, res) => {
         });
 
         if (!session) {
+            console.warn(`[SessionController] pingSession: No active session found for userId=${userId}, deviceId=${deviceId}`);
+            // Check if ANY session exists for this user/device even if offline
+            const anySession = await UserSession.findOne({ userId, deviceId }).sort({ lastPing: -1 });
+            if (anySession) {
+                console.log(`[SessionController] pingSession: Found an OFFLINE session for this user/device. isOnline=${anySession.isOnline}, lastPing=${anySession.lastPing}`);
+            } else {
+                console.log(`[SessionController] pingSession: No session record at all for this userId/deviceId.`);
+            }
             return res.status(404).json({
                 success: false,
                 message: 'No active session found'
