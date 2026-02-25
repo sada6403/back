@@ -1,5 +1,6 @@
 const Member = require('../models/Member');
 const mongoose = require('mongoose');
+const { broadcast, EVENTS } = require('../utils/socketManager');
 
 
 // @desc    Register a member
@@ -66,6 +67,8 @@ const registerMember = async (req, res, next) => {
         const savedMember = await newMember.save();
 
         // Return the saved document immediately
+        broadcast(EVENTS.MEMBER_ADDED, savedMember);
+
         res.status(201).json({
             success: true,
             message: 'Member registered successfully',
@@ -305,6 +308,7 @@ const updateMember = async (req, res) => {
             member.registrationData = registrationData || member.registrationData;
 
             const updatedMember = await member.save();
+            broadcast(EVENTS.MEMBER_UPDATED, updatedMember);
             res.json(updatedMember);
         } else {
             res.status(404);
@@ -329,6 +333,7 @@ const deleteMember = async (req, res) => {
             await Transaction.deleteMany({ memberId: member._id });
             // Then delete the member
             await member.deleteOne();
+            broadcast(EVENTS.MEMBER_DELETED, { id: req.params.id });
             res.json({ message: 'Member and their transactions removed' });
         } else {
             res.status(404);

@@ -1,5 +1,7 @@
 require('dotenv').config();
+const http = require('http');
 const PORT = process.env.PORT || 3000;
+const socketManager = require('./utils/socketManager');
 
 
 const express = require('express');
@@ -23,6 +25,7 @@ try {
     const employeeRoutes = require('./routes/employees');
     const sessionRoutes = require('./routes/sessionRoutes');
     const monitorRoutes = require('./routes/monitorRoutes');
+    const companyTransferRoutes = require('./routes/companyTransferRoutes');
     const errorHandler = require('./middleware/errorMiddleware');
 
     console.log('Routes Loaded');
@@ -58,9 +61,9 @@ try {
     app.use('/api/employees', employeeRoutes);
     app.use('/api/analysis', require('./routes/analysisRoutes'));
     app.use('/api/session', sessionRoutes);
-    app.use('/api/session', sessionRoutes);
     app.use('/api/monitor', monitorRoutes);
-    console.log('Mounting /api/monitor routes...'); // Debug log
+    app.use('/api/company-transfers', companyTransferRoutes);
+    console.log('Mounting routes completed'); // Debug log
 
     // API Ping (Diagnostic)
     app.get('/api/ping', async (req, res) => {
@@ -105,7 +108,12 @@ try {
     mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI)
         .then(() => {
             console.log('MongoDB Connected to Atlas!');
-            app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+
+            // Wrap Express with HTTP Server for Socket.io
+            const server = http.createServer(app);
+            socketManager.init(server);
+
+            server.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
             // Start background job to mark stale sessions offline
             startStaleSessionCleanup();

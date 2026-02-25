@@ -30,7 +30,10 @@ const FieldVisitorSchema = new mongoose.Schema({
     permanentAddress: { type: String },
     education: { type: mongoose.Schema.Types.Mixed }, // String or Object
     workExperience: { type: Array },
-    references: { type: Array }
+    references: { type: Array },
+
+    // Wallet
+    walletBalance: { type: Number, default: 0 }
 }, { collection: 'fieldvisitors' });
 
 // Hash password before saving

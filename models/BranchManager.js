@@ -29,7 +29,10 @@ const BranchManagerSchema = new mongoose.Schema({
     permanentAddress: { type: String },
     education: { type: mongoose.Schema.Types.Mixed },
     workExperience: { type: Array },
-    references: { type: Array }
+    references: { type: Array },
+
+    // Wallet
+    walletBalance: { type: Number, default: 0 }
 }, { collection: 'branchmanagers' });
 
 // Hash password before saving
