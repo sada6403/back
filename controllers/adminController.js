@@ -164,7 +164,7 @@ const deleteAdmin = async (req, res) => {
 const migrateManagersToAdmin = async (req, res) => {
     try {
         // Get all managers
-        const managers = await BranchManager.find();
+        const managers = await BranchManager.find().select('-profileImage -password').lean();
 
         if (managers.length === 0) {
             return res.json({

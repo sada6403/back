@@ -11,7 +11,7 @@ const tokenAnalyzer = jwt.sign(
 );
 
 const options = {
-    hostname: '13.62.224.112',
+    hostname: '13.48.199.103',
     port: 3001,
     path: '/api/transactions',
     method: 'GET',

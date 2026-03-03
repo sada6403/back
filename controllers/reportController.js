@@ -24,7 +24,7 @@ const getManagerDashboard = async (req, res) => {
         const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
         // Pull all field visitors for the branch
-        const fieldVisitors = await FieldVisitor.find(branchId ? { branchId } : {}).lean();
+        const fieldVisitors = await FieldVisitor.find(branchId ? { branchId } : {}).select('-profileImage -password').lean();
 
         // Contribution per field visitor from current month transactions
         const contributions = await Transaction.aggregate([
@@ -303,7 +303,7 @@ const getFieldVisitorDashboard = async (req, res) => {
         ]);
         const branchTotal = branchAgg.reduce((sum, item) => sum + item.totalAmount, 0);
         const fvMap = new Map(branchAgg.map(i => [i._id?.toString(), i.totalAmount]));
-        const branchFieldVisitors = await FieldVisitor.find({ branchId }).lean();
+        const branchFieldVisitors = await FieldVisitor.find({ branchId }).select('-profileImage -password').lean();
 
         const branchPie = {
             total: branchTotal,
@@ -556,7 +556,7 @@ const getDashboardStats = async (req, res) => {
         let fieldVisitors = [];
         if (isManager || isIT) {
             const fvSearchMatch = (branchId && branchId !== 'All') ? { branchId } : {};
-            const fvs = await FieldVisitor.find(fvSearchMatch).lean();
+            const fvs = await FieldVisitor.find(fvSearchMatch).select('-profileImage -password').lean();
 
             // Get stats per FV
             const fvStats = await Transaction.aggregate([

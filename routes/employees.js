@@ -85,27 +85,47 @@ const BranchManager = require('../models/BranchManager');
 
 const ITSector = require('../models/ITSector');
 const Analyzer = require('../models/Analyzer');
+const Member = require('../models/Member');
 
 // GET all employees (Aggregated from sub-collections)
 router.get('/', async (req, res) => {
     try {
         const [managers, fieldVisitors, branchManagers, itSectors, analyzers, employees] = await Promise.all([
-            Manager.find(),
-            FieldVisitor.find(),
-            BranchManager.find(),
-            ITSector.find(),
-            Analyzer.find(),
-            Employee.find() // Keep original too just in case
+            Manager.find().select('-profileImage -password').lean(),
+            FieldVisitor.find().select('-profileImage -password').lean(),
+            BranchManager.find().select('-profileImage -password').lean(),
+            ITSector.find().select('-profileImage -password').lean(),
+            Analyzer.find().select('-profileImage -password').lean(),
+            Employee.find().select('-profileImage -password').lean() // Keep original too just in case
         ]);
 
         console.log(`[Employees] Fetched: ${managers.length} Managers, ${fieldVisitors.length} FVs, ${analyzers.length} Analyzers`);
+
+        // Compute Leads Count for Field Visitors
+        const leadsAgg = await Member.aggregate([
+            { $match: { memberId: { $regex: /^L-/ } } },
+            { $group: { _id: '$fieldVisitorId', count: { $sum: 1 } } }
+        ]);
+
+        const leadsMap = {};
+        leadsAgg.forEach(item => {
+            if (item._id) leadsMap[item._id.toString()] = item.count;
+        });
+
+        const fieldVisitorsWithLeads = fieldVisitors.map(fv => {
+            const fvObj = fv.toObject ? fv.toObject() : fv;
+            return {
+                ...fvObj,
+                leadsCount: leadsMap[fv._id.toString()] || 0
+            };
+        });
 
         // Return structured data as expected by Backend EmployeeService
         res.json({
             success: true,
             data: {
                 managers,
-                fieldVisitors,
+                fieldVisitors: fieldVisitorsWithLeads,
                 branchManagers,
                 itSectors,
                 analyzers: analyzers, // Added

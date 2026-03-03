@@ -6,7 +6,7 @@ const ITSector = require('../models/ITSector');
 // @access  Private
 const getManagers = async (req, res) => {
     try {
-        const managers = await BranchManager.find({}).select('-password');
+        const managers = await BranchManager.find({}).select('-password -profileImage').lean();
         res.json({ success: true, count: managers.length, managers });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to fetch managers', error: error.message });

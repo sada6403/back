@@ -230,7 +230,7 @@ const getFieldVisitors = async (req, res) => {
 
     const branchId = req.user?.branchId || 'default-branch';
     const count = await FieldVisitor.countDocuments({ branchId });
-    const fieldVisitors = await FieldVisitor.find({ branchId })
+    const fieldVisitors = await FieldVisitor.find({ branchId }).select('-profileImage -password')
         .limit(pageSize)
         .skip(pageSize * (page - 1))
         .lean(); // Use lean to get plain JS objects
