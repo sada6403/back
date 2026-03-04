@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const Note = require('../models/Note');
 const BranchManager = require('../models/BranchManager');
 const mongoose = require('mongoose');
+const cacheService = require('../utils/cacheService');
 
 const branchFilter = (user) => ({ branchId: user.branchId || 'default-branch' });
 
@@ -13,109 +14,106 @@ const branchFilter = (user) => ({ branchId: user.branchId || 'default-branch' })
 const getManagerDashboard = async (req, res) => {
     try {
         let branchId = req.user?.branchId || 'default-branch';
-        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(req.user?.role);
+        const cacheKey = `manager_dashboard_${branchId}_${req.user?.role}`;
 
-        if (isIT && branchId === 'All') {
-            branchId = null; // Don't filter by branch for IT
-        }
+        const data = await cacheService.getOrSet(cacheKey, async () => {
+            const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(req.user?.role);
 
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-        // Pull all field visitors for the branch
-        const fieldVisitors = await FieldVisitor.find(branchId ? { branchId } : {}).select('-profileImage -password').lean();
-
-        // Contribution per field visitor from current month transactions
-        const contributions = await Transaction.aggregate([
-            { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfMonth, $lte: endOfMonth } } },
-            {
-                $group: {
-                    _id: '$fieldVisitorId',
-                    totalAmount: { $sum: '$totalAmount' },
-                    transactionCount: { $sum: 1 }
-                }
+            if (isIT && branchId === 'All') {
+                branchId = null; // Don't filter by branch for IT
             }
-        ]);
 
-        // Member counts per field visitor
-        const memberCounts = await Member.aggregate([
-            { $match: { ...(branchId ? { branchId } : {}) } },
-            { $group: { _id: '$fieldVisitorId', memberCount: { $sum: 1 } } }
-        ]);
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-        const contributionMap = new Map(contributions.map(c => [c._id?.toString(), c]));
-        const memberMap = new Map(memberCounts.map(m => [m._id?.toString(), m.memberCount]));
+            // Pull all field visitors for the branch
+            const fieldVisitors = await FieldVisitor.find(branchId ? { branchId } : {}).select('-profileImage -password').lean();
 
-        const fieldVisitorStats = fieldVisitors.map(fv => {
-            const key = fv._id.toString();
-            const contrib = contributionMap.get(key) || { totalAmount: 0, transactionCount: 0 };
-            return {
-                _id: fv._id,
-                name: fv.name || fv.fullName,
-                userId: fv.userId,
-                phone: fv.phone,
-                totalAmount: contrib.totalAmount,
-                transactionCount: contrib.transactionCount,
-                memberCount: memberMap.get(key) || 0
+            // Contribution per field visitor from current month transactions
+            const contributions = await Transaction.aggregate([
+                { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfMonth, $lte: endOfMonth } } },
+                {
+                    $group: {
+                        _id: '$fieldVisitorId',
+                        totalAmount: { $sum: '$totalAmount' },
+                        transactionCount: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            // Member counts per field visitor
+            const memberCounts = await Member.aggregate([
+                { $match: { ...(branchId ? { branchId } : {}) } },
+                { $group: { _id: '$fieldVisitorId', memberCount: { $sum: 1 } } }
+            ]);
+
+            const contributionMap = new Map(contributions.map(c => [c._id?.toString(), c]));
+            const memberMap = new Map(memberCounts.map(m => [m._id?.toString(), m.memberCount]));
+
+            const fieldVisitorStats = fieldVisitors.map(fv => {
+                const key = fv._id.toString();
+                const contrib = contributionMap.get(key) || { totalAmount: 0, transactionCount: 0 };
+                return {
+                    _id: fv._id,
+                    name: fv.name || fv.fullName,
+                    userId: fv.userId,
+                    phone: fv.phone,
+                    totalAmount: contrib.totalAmount,
+                    transactionCount: contrib.transactionCount,
+                    memberCount: memberMap.get(key) || 0
+                };
+            }).sort((a, b) => b.totalAmount - a.totalAmount);
+
+            const totalBranchAmount = fieldVisitorStats.reduce((sum, fv) => sum + fv.totalAmount, 0);
+            const totalTransactions = fieldVisitorStats.reduce((sum, fv) => sum + fv.transactionCount, 0);
+            const totalMembers = fieldVisitorStats.reduce((sum, fv) => sum + fv.memberCount, 0);
+
+            const pie = {
+                total: totalBranchAmount,
+                slices: fieldVisitorStats.map(fv => ({
+                    label: fv.name || fv.userId,
+                    value: fv.totalAmount,
+                    fieldVisitorId: fv._id,
+                    userId: fv.userId
+                }))
             };
-        }).sort((a, b) => b.totalAmount - a.totalAmount);
 
-        const totalBranchAmount = fieldVisitorStats.reduce((sum, fv) => sum + fv.totalAmount, 0);
-        const totalTransactions = fieldVisitorStats.reduce((sum, fv) => sum + fv.transactionCount, 0);
-        const totalMembers = fieldVisitorStats.reduce((sum, fv) => sum + fv.memberCount, 0);
+            // Bar chart: monthly totals for current year
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
 
-        const pie = {
-            total: totalBranchAmount,
-            slices: fieldVisitorStats.map(fv => ({
-                label: fv.name || fv.userId,
-                value: fv.totalAmount,
-                fieldVisitorId: fv._id,
-                userId: fv.userId
-            }))
-        };
+            const monthlyData = await Transaction.aggregate([
+                { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfYear, $lte: endOfYear } } },
+                {
+                    $group: {
+                        _id: { month: { $month: '$date' }, type: '$type' },
+                        totalAmount: { $sum: '$totalAmount' }
+                    }
+                },
+                { $sort: { '_id.month': 1 } }
+            ]);
 
-        // Bar chart: monthly totals for current year
-        const startOfYear = new Date(now.getFullYear(), 0, 1);
-        const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+            const barChart = Array.from({ length: 12 }, (_, i) => ({
+                month: i + 1,
+                buy: 0,
+                sell: 0
+            }));
 
-        const monthlyData = await Transaction.aggregate([
-            { $match: { ...(branchId ? { branchId } : {}), date: { $gte: startOfYear, $lte: endOfYear } } },
-            {
-                $group: {
-                    _id: { month: { $month: '$date' }, type: '$type' },
-                    totalAmount: { $sum: '$totalAmount' }
+            monthlyData.forEach(item => {
+                const monthIndex = item._id.month - 1;
+                if (item._id.type === 'buy') {
+                    barChart[monthIndex].buy = item.totalAmount;
+                } else if (item._id.type === 'sell') {
+                    barChart[monthIndex].sell = item.totalAmount;
                 }
-            },
-            { $sort: { '_id.month': 1 } }
-        ]);
+            });
 
-        const barChart = Array.from({ length: 12 }, (_, i) => ({
-            month: i + 1,
-            buy: 0,
-            sell: 0
-        }));
-
-        monthlyData.forEach(item => {
-            const monthIndex = item._id.month - 1;
-            if (item._id.type === 'buy') {
-                barChart[monthIndex].buy = item.totalAmount;
-            } else if (item._id.type === 'sell') {
-                barChart[monthIndex].sell = item.totalAmount;
-            }
         });
 
         res.json({
             success: true,
-            data: {
-                branchId,
-                totalBranchAmount,
-                totalTransactions,
-                totalMembers,
-                fieldVisitors: fieldVisitorStats,
-                pie,
-                barChart
-            }
+            data
         });
     } catch (error) {
         console.error('[getManagerDashboard] Error:', error.message);
@@ -129,204 +127,200 @@ const getFieldVisitorDashboard = async (req, res) => {
     try {
         const branchId = req.user?.branchId || 'default-branch';
         let fieldVisitorId = req.user?._id;
-        if (fieldVisitorId) fieldVisitorId = new mongoose.Types.ObjectId(fieldVisitorId);
+        const cacheKey = `fv_dashboard_${fieldVisitorId}`;
 
-        // Get BUY and SELL totals separately for accurate dashboard
-        const transactionBreakdown = await Transaction.aggregate([
-            { $match: { branchId, fieldVisitorId } },
-            {
-                $group: {
-                    _id: '$type',
-                    totalAmount: { $sum: '$totalAmount' },
-                    count: { $sum: 1 }
+        const data = await cacheService.getOrSet(cacheKey, async () => {
+            if (fieldVisitorId) fieldVisitorId = new mongoose.Types.ObjectId(fieldVisitorId);
+
+            // Get BUY and SELL totals separately for accurate dashboard
+            const transactionBreakdown = await Transaction.aggregate([
+                { $match: { branchId, fieldVisitorId } },
+                {
+                    $group: {
+                        _id: '$type',
+                        totalAmount: { $sum: '$totalAmount' },
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            let buyTotal = 0;
+            let sellTotal = 0;
+            let buyCount = 0;
+            let sellCount = 0;
+
+            transactionBreakdown.forEach(item => {
+                if (item._id === 'buy') {
+                    buyTotal = item.totalAmount;
+                    buyCount = item.count;
+                } else if (item._id === 'sell') {
+                    sellTotal = item.totalAmount;
+                    sellCount = item.count;
+                }
+            });
+
+            const fvTotals = {
+                totalAmount: buyTotal + sellTotal,
+                transactionCount: buyCount + sellCount,
+                buyTotal,
+                sellTotal,
+                buyCount,
+                sellCount
+            };
+
+            // Latest transactions for this field visitor
+            const transactions = await Transaction.find({ branchId, fieldVisitorId })
+                .sort({ date: -1 })
+                .limit(50)
+                .populate('memberId', 'name mobile memberCode branchId')
+                .lean();
+
+            // Notifications and notes (auto-fill if legacy data missing)
+            let notifications = await Notification.find({ fieldVisitorId })
+                .sort({ date: -1 })
+                .limit(50)
+                .lean();
+
+            if (notifications.length === 0) {
+                const existingIds = new Set(notifications.map(n => n.transactionId?.toString()));
+                const missingTx = transactions.filter(tx => tx._id && !existingIds.has(tx._id.toString()));
+                if (missingTx.length) {
+                    const bulk = missingTx.map(tx => ({
+                        title: `${tx.type === 'sell' ? '📤 Sale' : '🛒 Purchase'} - ${tx.productName}`,
+                        body: `Transaction of Rs. ${tx.totalAmount} on ${new Date(tx.date).toLocaleDateString()} for ${(tx.memberId && tx.memberId.name) || 'Member'}`,
+                        date: tx.date || new Date(),
+                        isRead: false,
+                        transactionId: tx._id,
+                        fieldVisitorId,
+                        memberId: tx.memberId?._id || tx.memberId,
+                        branchId,
+                        userId: fieldVisitorId,
+                        userRole: 'field_visitor'
+                    }));
+                    if (bulk.length) {
+                        await Notification.insertMany(bulk);
+                        notifications = await Notification.find({ fieldVisitorId })
+                            .sort({ date: -1 })
+                            .limit(50)
+                            .lean();
+                    }
                 }
             }
-        ]);
 
-        let buyTotal = 0;
-        let sellTotal = 0;
-        let buyCount = 0;
-        let sellCount = 0;
+            const notes = await Note.find({ fieldVisitorId })
+                .sort({ createdAt: -1 })
+                .limit(50)
+                .lean();
 
-        transactionBreakdown.forEach(item => {
-            if (item._id === 'buy') {
-                buyTotal = item.totalAmount;
-                buyCount = item.count;
-            } else if (item._id === 'sell') {
-                sellTotal = item.totalAmount;
-                sellCount = item.count;
-            }
+            // Get current month date range for pie charts
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+            // BUY Pie Chart - This Visitor vs Others (by quantity)
+            const buyQuantityBreakdown = await Transaction.aggregate([
+                {
+                    $match: {
+                        branchId,
+                        type: 'buy',
+                        date: { $gte: startOfMonth, $lte: endOfMonth }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$fieldVisitorId',
+                        totalQuantity: { $sum: '$quantity' }
+                    }
+                }
+            ]);
+
+            let buyThisVisitor = 0;
+            let buyOthers = 0;
+            const buyMap = new Map(buyQuantityBreakdown.map(b => [b._id?.toString(), b.totalQuantity]));
+
+            buyMap.forEach((qty, fvId) => {
+                if (fvId === fieldVisitorId.toString()) {
+                    buyThisVisitor = qty;
+                } else {
+                    buyOthers += qty;
+                }
+            });
+
+            // SELL Pie Chart - This Visitor vs Others (by quantity)
+            const sellQuantityBreakdown = await Transaction.aggregate([
+                {
+                    $match: {
+                        branchId,
+                        type: 'sell',
+                        date: { $gte: startOfMonth, $lte: endOfMonth }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$fieldVisitorId',
+                        totalQuantity: { $sum: '$quantity' }
+                    }
+                }
+            ]);
+
+            let sellThisVisitor = 0;
+            let sellOthers = 0;
+            const sellMap = new Map(sellQuantityBreakdown.map(s => [s._id?.toString(), s.totalQuantity]));
+
+            sellMap.forEach((qty, fvId) => {
+                if (fvId === fieldVisitorId.toString()) {
+                    sellThisVisitor = qty;
+                } else {
+                    sellOthers += qty;
+                }
+            });
+
+            // Buy pie chart data
+            const buyPieChart = {
+                thisVisitor: buyThisVisitor,
+                others: buyOthers,
+                total: buyThisVisitor + buyOthers,
+                slices: [
+                    { label: 'This Visitor', value: buyThisVisitor },
+                    { label: 'Others', value: buyOthers }
+                ]
+            };
+
+            // Sell pie chart data
+            const sellPieChart = {
+                thisVisitor: sellThisVisitor,
+                others: sellOthers,
+                total: sellThisVisitor + sellOthers,
+                slices: [
+                    { label: 'This Visitor', value: sellThisVisitor },
+                    { label: 'Others', value: sellOthers }
+                ]
+            };
+
+            // Branch pie breakdown (overall contribution)
+            const branchAgg = await Transaction.aggregate([
+                { $match: { branchId } },
+                { $group: { _id: '$fieldVisitorId', totalAmount: { $sum: '$totalAmount' } } }
+            ]);
+            const branchTotal = branchAgg.reduce((sum, item) => sum + item.totalAmount, 0);
+            const fvMap = new Map(branchAgg.map(i => [i._id?.toString(), i.totalAmount]));
+            const branchFieldVisitors = await FieldVisitor.find({ branchId }).select('-profileImage -password').lean();
+
+            const branchPie = {
+                total: branchTotal,
+                slices: branchFieldVisitors.map(fv => ({
+                    label: fv.name || fv.fullName || fv.userId,
+                    value: fvMap.get(fv._id.toString()) || 0,
+                    fieldVisitorId: fv._id,
+                    userId: fv.userId
+                }))
+            };
+
         });
-
-        const fvTotals = {
-            totalAmount: buyTotal + sellTotal,
-            transactionCount: buyCount + sellCount,
-            buyTotal,
-            sellTotal,
-            buyCount,
-            sellCount
-        };
-
-        // Latest transactions for this field visitor
-        const transactions = await Transaction.find({ branchId, fieldVisitorId })
-            .sort({ date: -1 })
-            .limit(50)
-            .populate('memberId', 'name mobile memberCode branchId')
-            .lean();
-
-        // Notifications and notes (auto-fill if legacy data missing)
-        let notifications = await Notification.find({ fieldVisitorId })
-            .sort({ date: -1 })
-            .limit(50)
-            .lean();
-
-        if (notifications.length === 0) {
-            const existingIds = new Set(notifications.map(n => n.transactionId?.toString()));
-            const missingTx = transactions.filter(tx => tx._id && !existingIds.has(tx._id.toString()));
-            if (missingTx.length) {
-                const bulk = missingTx.map(tx => ({
-                    title: `${tx.type === 'sell' ? '📤 Sale' : '🛒 Purchase'} - ${tx.productName}`,
-                    body: `Transaction of Rs. ${tx.totalAmount} on ${new Date(tx.date).toLocaleDateString()} for ${(tx.memberId && tx.memberId.name) || 'Member'}`,
-                    date: tx.date || new Date(),
-                    isRead: false,
-                    transactionId: tx._id,
-                    fieldVisitorId,
-                    memberId: tx.memberId?._id || tx.memberId,
-                    branchId,
-                    userId: fieldVisitorId,
-                    userRole: 'field_visitor'
-                }));
-                if (bulk.length) {
-                    await Notification.insertMany(bulk);
-                    notifications = await Notification.find({ fieldVisitorId })
-                        .sort({ date: -1 })
-                        .limit(50)
-                        .lean();
-                }
-            }
-        }
-
-        const notes = await Note.find({ fieldVisitorId })
-            .sort({ createdAt: -1 })
-            .limit(50)
-            .lean();
-
-        // Get current month date range for pie charts
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-        // BUY Pie Chart - This Visitor vs Others (by quantity)
-        const buyQuantityBreakdown = await Transaction.aggregate([
-            {
-                $match: {
-                    branchId,
-                    type: 'buy',
-                    date: { $gte: startOfMonth, $lte: endOfMonth }
-                }
-            },
-            {
-                $group: {
-                    _id: '$fieldVisitorId',
-                    totalQuantity: { $sum: '$quantity' }
-                }
-            }
-        ]);
-
-        let buyThisVisitor = 0;
-        let buyOthers = 0;
-        const buyMap = new Map(buyQuantityBreakdown.map(b => [b._id?.toString(), b.totalQuantity]));
-
-        buyMap.forEach((qty, fvId) => {
-            if (fvId === fieldVisitorId.toString()) {
-                buyThisVisitor = qty;
-            } else {
-                buyOthers += qty;
-            }
-        });
-
-        // SELL Pie Chart - This Visitor vs Others (by quantity)
-        const sellQuantityBreakdown = await Transaction.aggregate([
-            {
-                $match: {
-                    branchId,
-                    type: 'sell',
-                    date: { $gte: startOfMonth, $lte: endOfMonth }
-                }
-            },
-            {
-                $group: {
-                    _id: '$fieldVisitorId',
-                    totalQuantity: { $sum: '$quantity' }
-                }
-            }
-        ]);
-
-        let sellThisVisitor = 0;
-        let sellOthers = 0;
-        const sellMap = new Map(sellQuantityBreakdown.map(s => [s._id?.toString(), s.totalQuantity]));
-
-        sellMap.forEach((qty, fvId) => {
-            if (fvId === fieldVisitorId.toString()) {
-                sellThisVisitor = qty;
-            } else {
-                sellOthers += qty;
-            }
-        });
-
-        // Buy pie chart data
-        const buyPieChart = {
-            thisVisitor: buyThisVisitor,
-            others: buyOthers,
-            total: buyThisVisitor + buyOthers,
-            slices: [
-                { label: 'This Visitor', value: buyThisVisitor },
-                { label: 'Others', value: buyOthers }
-            ]
-        };
-
-        // Sell pie chart data
-        const sellPieChart = {
-            thisVisitor: sellThisVisitor,
-            others: sellOthers,
-            total: sellThisVisitor + sellOthers,
-            slices: [
-                { label: 'This Visitor', value: sellThisVisitor },
-                { label: 'Others', value: sellOthers }
-            ]
-        };
-
-        // Branch pie breakdown (overall contribution)
-        const branchAgg = await Transaction.aggregate([
-            { $match: { branchId } },
-            { $group: { _id: '$fieldVisitorId', totalAmount: { $sum: '$totalAmount' } } }
-        ]);
-        const branchTotal = branchAgg.reduce((sum, item) => sum + item.totalAmount, 0);
-        const fvMap = new Map(branchAgg.map(i => [i._id?.toString(), i.totalAmount]));
-        const branchFieldVisitors = await FieldVisitor.find({ branchId }).select('-profileImage -password').lean();
-
-        const branchPie = {
-            total: branchTotal,
-            slices: branchFieldVisitors.map(fv => ({
-                label: fv.name || fv.fullName || fv.userId,
-                value: fvMap.get(fv._id.toString()) || 0,
-                fieldVisitorId: fv._id,
-                userId: fv.userId
-            }))
-        };
 
         res.json({
             success: true,
-            data: {
-                branchId,
-                totals: fvTotals,
-                buyPieChart,
-                sellPieChart,
-                branchPie,
-                transactions,
-                notifications,
-                notes
-            }
+            data
         });
     } catch (error) {
         console.error('[getFieldVisitorDashboard] Error:', error.message);
@@ -385,253 +379,238 @@ const getYearlyAnalysis = async (req, res) => {
 const getDashboardStats = async (req, res) => {
     try {
         const branchId = req.user?.branchId || 'default-branch';
-        const isITRole = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
-        const isManager = req.user?.role === 'manager' || isITRole;
+        const userId = req.user?._id;
+        const userRole = req.user?.role;
+        const cacheKey = `dashboard_stats_${branchId}_${userId}_${userRole}`;
 
-        // Get current month's date range
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const data = await cacheService.getOrSet(cacheKey, async () => {
+            const isITRole = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
+            const isIT = isITRole; // Consistency
+            const isManager = req.user?.role === 'manager' || isITRole;
 
-        // Build transaction filter
-        const txFilter = {
-            date: { $gte: startOfMonth, $lte: endOfMonth }
-        };
+            // Get current month's date range
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-        if (branchId && branchId !== 'All') {
-            txFilter.branchId = branchId;
-        }
+            // Build transaction filter
+            const txFilter = {
+                date: { $gte: startOfMonth, $lte: endOfMonth }
+            };
 
-        // If not manager or IT, only show their own transactions
-        if (!isManager) {
-            txFilter.fieldVisitorId = userId;
-        }
-
-        // If not manager or IT, only show their own transactions
-        if (!isManager && !isIT) {
-            txFilter.fieldVisitorId = userId;
-        }
-
-        // Get BUY and SELL totals for current month
-        const monthlyBreakdown = await Transaction.aggregate([
-            { $match: txFilter },
-            {
-                $group: {
-                    _id: '$type',
-                    totalAmount: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-
-        let buyAmount = 0;
-        let sellAmount = 0;
-
-        monthlyBreakdown.forEach(item => {
-            if (item._id === 'buy') {
-                buyAmount = item.totalAmount;
-            } else if (item._id === 'sell') {
-                sellAmount = item.totalAmount;
-            }
-        });
-
-        // Get total members count
-        const memberFilter = {};
-        if (branchId && branchId !== 'All') {
-            memberFilter.branchId = branchId;
-        }
-        if (!isManager && !isIT) {
-            memberFilter.fieldVisitorId = userId;
-        }
-
-        const totalMembers = await Member.countDocuments(memberFilter);
-
-        // Get recent transactions
-        const recentTxFilter = {};
-        if (branchId && branchId !== 'All') {
-            recentTxFilter.branchId = branchId;
-        }
-        if (!isManager && !isIT) {
-            recentTxFilter.fieldVisitorId = userId;
-        }
-        const transactions = await Transaction.find(recentTxFilter)
-            .sort({ date: -1 })
-            .limit(10)
-            .populate('memberId', 'fullName name mobile')
-            .lean();
-
-        // Get notifications
-        // Get notifications
-        let notificationFilter = { fieldVisitorId: userId };
-        if (isManager || isIT) {
-            notificationFilter = {};
             if (branchId && branchId !== 'All') {
-                notificationFilter.branchId = branchId;
+                txFilter.branchId = branchId;
             }
-        }
-        const notifications = await Notification.find(notificationFilter)
-            .sort({ date: -1 })
-            .limit(10)
-            .lean();
 
-        // Stats for pie charts (by quantity)
-        // If not manager, strictly filter pie data to this user (hide 'Others')
-        const pieMatch = {};
-        if (branchId && branchId !== 'All') {
-            pieMatch.branchId = branchId;
-        }
-
-        // Date matching for strict current month filtering (matching memberController logic)
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1; // MongoDB $month is 1-indexed
-
-        const dateMatch = {
-            $expr: {
-                $and: [
-                    { $eq: [{ $year: '$date' }, currentYear] },
-                    { $eq: [{ $month: '$date' }, currentMonth] }
-                ]
+            // If not manager or IT, only show their own transactions
+            if (!isManager) {
+                txFilter.fieldVisitorId = userId;
             }
-        };
-        if (!isManager) {
-            // pieMatch.fieldVisitorId = userId; // Allow seeing others for comparison
-        }
 
-        const buyAmountBreakdown = await Transaction.aggregate([
-            {
-                $match: {
-                    ...pieMatch,
-                    type: 'buy',
-                    ...dateMatch
-                }
-            },
-            {
-                $group: {
-                    _id: '$fieldVisitorId',
-                    totalAmount: { $sum: '$totalAmount' }
-                }
+            // If not manager or IT, only show their own transactions
+            if (!isManager && !isIT) {
+                txFilter.fieldVisitorId = userId;
             }
-        ]);
 
-        let buyThisUser = 0;
-        let buyOthers = 0;
-
-        buyAmountBreakdown.forEach(item => {
-            const fvId = item._id?.toString();
-            if (fvId === userId.toString()) {
-                buyThisUser = item.totalAmount;
-            } else {
-                buyOthers += item.totalAmount;
-            }
-        });
-
-        const sellAmountBreakdown = await Transaction.aggregate([
-            {
-                $match: {
-                    ...pieMatch,
-                    type: 'sell',
-                    ...dateMatch
-                }
-            },
-            {
-                $group: {
-                    _id: '$fieldVisitorId',
-                    totalAmount: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-
-        let sellThisUser = 0;
-        let sellOthers = 0;
-
-        sellAmountBreakdown.forEach(item => {
-            const fvId = item._id?.toString();
-            if (fvId === userId.toString()) {
-                sellThisUser = item.totalAmount;
-            } else {
-                sellOthers += item.totalAmount;
-            }
-        });
-
-        // If manager or IT, we also want the list of field visitors for the dashboard
-        let fieldVisitors = [];
-        if (isManager || isIT) {
-            const fvSearchMatch = (branchId && branchId !== 'All') ? { branchId } : {};
-            const fvs = await FieldVisitor.find(fvSearchMatch).select('-profileImage -password').lean();
-
-            // Get stats per FV
-            const fvStats = await Transaction.aggregate([
-                { $match: { ...fvSearchMatch, date: { $gte: startOfMonth, $lte: endOfMonth } } },
+            // Get BUY and SELL totals for current month
+            const monthlyBreakdown = await Transaction.aggregate([
+                { $match: txFilter },
                 {
                     $group: {
-                        _id: '$fieldVisitorId',
-                        totalAmount: { $sum: '$totalAmount' },
-                        transactionCount: { $sum: 1 }
+                        _id: '$type',
+                        totalAmount: { $sum: '$totalAmount' }
                     }
                 }
             ]);
 
-            const fvMemberCounts = await Member.aggregate([
-                { $match: fvSearchMatch },
-                { $group: { _id: '$fieldVisitorId', count: { $sum: 1 } } }
+            let buyAmount = 0;
+            let sellAmount = 0;
+
+            monthlyBreakdown.forEach(item => {
+                if (item._id === 'buy') {
+                    buyAmount = item.totalAmount;
+                } else if (item._id === 'sell') {
+                    sellAmount = item.totalAmount;
+                }
+            });
+
+            // Get total members count
+            const memberFilter = {};
+            if (branchId && branchId !== 'All') {
+                memberFilter.branchId = branchId;
+            }
+            if (!isManager && !isIT) {
+                memberFilter.fieldVisitorId = userId;
+            }
+
+            const totalMembers = await Member.countDocuments(memberFilter);
+
+            // Get recent transactions
+            const recentTxFilter = {};
+            if (branchId && branchId !== 'All') {
+                recentTxFilter.branchId = branchId;
+            }
+            if (!isManager && !isIT) {
+                recentTxFilter.fieldVisitorId = userId;
+            }
+            const transactions = await Transaction.find(recentTxFilter)
+                .sort({ date: -1 })
+                .limit(10)
+                .populate('memberId', 'fullName name mobile')
+                .lean();
+
+            // Get notifications
+            // Get notifications
+            let notificationFilter = { fieldVisitorId: userId };
+            if (isManager || isIT) {
+                notificationFilter = {};
+                if (branchId && branchId !== 'All') {
+                    notificationFilter.branchId = branchId;
+                }
+            }
+            const notifications = await Notification.find(notificationFilter)
+                .sort({ date: -1 })
+                .limit(10)
+                .lean();
+
+            // Stats for pie charts (by quantity)
+            // If not manager, strictly filter pie data to this user (hide 'Others')
+            const pieMatch = {};
+            if (branchId && branchId !== 'All') {
+                pieMatch.branchId = branchId;
+            }
+
+            // Date matching for strict current month filtering (matching memberController logic)
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1; // MongoDB $month is 1-indexed
+
+            const dateMatch = {
+                $expr: {
+                    $and: [
+                        { $eq: [{ $year: '$date' }, currentYear] },
+                        { $eq: [{ $month: '$date' }, currentMonth] }
+                    ]
+                }
+            };
+            if (!isManager) {
+                // pieMatch.fieldVisitorId = userId; // Allow seeing others for comparison
+            }
+
+            const buyAmountBreakdown = await Transaction.aggregate([
+                {
+                    $match: {
+                        ...pieMatch,
+                        type: 'buy',
+                        ...dateMatch
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$fieldVisitorId',
+                        totalAmount: { $sum: '$totalAmount' }
+                    }
+                }
             ]);
 
-            const statsMap = new Map(fvStats.map(s => [s._id?.toString(), s]));
-            const countMap = new Map(fvMemberCounts.map(c => [c._id?.toString(), c.count]));
+            let buyThisUser = 0;
+            let buyOthers = 0;
 
-            fieldVisitors = fvs.map(fv => {
-                const s = statsMap.get(fv._id.toString()) || { totalAmount: 0, transactionCount: 0 };
-                return {
-                    id: fv._id,
-                    _id: fv._id,
-                    name: fv.name || fv.fullName,
-                    code: fv.userId || fv.code,
-                    userId: fv.userId,
-                    phone: fv.phone,
-                    email: fv.email,
-                    address: fv.postalAddress || fv.address || 'N/A', // Map address
-                    amount: s.totalAmount,
-                    totalAmount: s.totalAmount,
-                    transactionCount: s.transactionCount,
-                    memberCount: countMap.get(fv._id.toString()) || 0
-                };
+            buyAmountBreakdown.forEach(item => {
+                const fvId = item._id?.toString();
+                if (fvId === userId.toString()) {
+                    buyThisUser = item.totalAmount;
+                } else {
+                    buyOthers += item.totalAmount;
+                }
             });
-        }
 
-        // Get count of all transactions for this month/year for the branch (for managers/IT)
-        let totalTransactionsCount = 0;
-        if (isManager || isIT) {
-            const countMatch = (branchId && branchId !== 'All') ? { branchId } : {};
-            totalTransactionsCount = await Transaction.countDocuments(countMatch);
-        } else {
-            totalTransactionsCount = await Transaction.countDocuments({ fieldVisitorId: userId });
-        }
+            const sellAmountBreakdown = await Transaction.aggregate([
+                {
+                    $match: {
+                        ...pieMatch,
+                        type: 'sell',
+                        ...dateMatch
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$fieldVisitorId',
+                        totalAmount: { $sum: '$totalAmount' }
+                    }
+                }
+            ]);
+
+            let sellThisUser = 0;
+            let sellOthers = 0;
+
+            sellAmountBreakdown.forEach(item => {
+                const fvId = item._id?.toString();
+                if (fvId === userId.toString()) {
+                    sellThisUser = item.totalAmount;
+                } else {
+                    sellOthers += item.totalAmount;
+                }
+            });
+
+            // If manager or IT, we also want the list of field visitors for the dashboard
+            let fieldVisitors = [];
+            if (isManager || isIT) {
+                const fvSearchMatch = (branchId && branchId !== 'All') ? { branchId } : {};
+                const fvs = await FieldVisitor.find(fvSearchMatch).select('-profileImage -password').lean();
+
+                // Get stats per FV
+                const fvStats = await Transaction.aggregate([
+                    { $match: { ...fvSearchMatch, date: { $gte: startOfMonth, $lte: endOfMonth } } },
+                    {
+                        $group: {
+                            _id: '$fieldVisitorId',
+                            totalAmount: { $sum: '$totalAmount' },
+                            transactionCount: { $sum: 1 }
+                        }
+                    }
+                ]);
+
+                const fvMemberCounts = await Member.aggregate([
+                    { $match: fvSearchMatch },
+                    { $group: { _id: '$fieldVisitorId', count: { $sum: 1 } } }
+                ]);
+
+                const statsMap = new Map(fvStats.map(s => [s._id?.toString(), s]));
+                const countMap = new Map(fvMemberCounts.map(c => [c._id?.toString(), c.count]));
+
+                fieldVisitors = fvs.map(fv => {
+                    const s = statsMap.get(fv._id.toString()) || { totalAmount: 0, transactionCount: 0 };
+                    return {
+                        id: fv._id,
+                        _id: fv._id,
+                        name: fv.name || fv.fullName,
+                        code: fv.userId || fv.code,
+                        userId: fv.userId,
+                        phone: fv.phone,
+                        email: fv.email,
+                        address: fv.postalAddress || fv.address || 'N/A', // Map address
+                        amount: s.totalAmount,
+                        totalAmount: s.totalAmount,
+                        transactionCount: s.transactionCount,
+                        memberCount: countMap.get(fv._id.toString()) || 0
+                    };
+                });
+            }
+
+            // Get count of all transactions for this month/year for the branch (for managers/IT)
+            let totalTransactionsCount = 0;
+            if (isManager || isIT) {
+                const countMatch = (branchId && branchId !== 'All') ? { branchId } : {};
+                totalTransactionsCount = await Transaction.countDocuments(countMatch);
+            } else {
+                totalTransactionsCount = await Transaction.countDocuments({ fieldVisitorId: userId });
+            }
+
+        });
 
         res.json({
             success: true,
-            data: {
-                buy: { amount: buyAmount },
-                sell: { amount: sellAmount },
-                monthlyTotals: {
-                    buyAmount,
-                    sellAmount,
-                    totalAmount: buyAmount + sellAmount
-                },
-                buyPieChart: {
-                    thisVisitor: buyThisUser,
-                    others: buyOthers,
-                    total: buyThisUser + buyOthers
-                },
-                sellPieChart: {
-                    thisVisitor: sellThisUser,
-                    others: sellOthers,
-                    total: sellThisUser + sellOthers
-                },
-                totalMembers,
-                totalTransactions: totalTransactionsCount,
-                transactions,
-                notifications,
-                fieldVisitors // Only populated for managers
-            }
+            data
         });
     } catch (error) {
         console.error('[getDashboardStats] Error:', error.message);

@@ -8,6 +8,7 @@ const BranchManager = require('../models/BranchManager');
 const Notification = require('../models/Notification');
 const Product = require('../models/Product');
 const { generateBillPDF } = require('../utils/pdfGenerator');
+const cacheService = require('../utils/cacheService');
 
 const debugLog = (msg) => {
     const logPath = path.join(__dirname, '../debug_report.log');
@@ -266,6 +267,11 @@ const getTransactions = async (req, res) => {
             .sort({ date: -1 })
             .populate('memberId', 'name memberId contact branchId')
             .populate('fieldVisitorId', 'fullName userId branchId');
+
+        // Invalidate related caches
+        cacheService.deleteByPattern('dashboard');
+        cacheService.deleteByPattern('fv_dashboard');
+        cacheService.deleteByPattern('manager_dashboard');
 
         res.json({ success: true, count: transactions.length, data: transactions });
     } catch (error) {
