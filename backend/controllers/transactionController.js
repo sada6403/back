@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const mongoose = require('mongoose');
 const Transaction = require('../models/Transaction');
 const Member = require('../models/Member');
@@ -6,6 +8,14 @@ const BranchManager = require('../models/BranchManager');
 const Notification = require('../models/Notification');
 const Product = require('../models/Product');
 const { generateBillPDF } = require('../utils/pdfGenerator');
+const cacheService = require('../utils/cacheService');
+
+const debugLog = (msg) => {
+    const logPath = path.join(__dirname, '../debug_report.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
+    console.log(`[DEBUG] ${msg}`);
+};
 
 // Generate Bill Number
 const generateBillNumber = async (type) => {
@@ -91,7 +101,8 @@ const createTransaction = async (req, res) => {
             branchId,
             memberCode: member.memberId, // Save the visible Member Code
             date: new Date(), // Explicitly set date to ensure it exists for PDF
-            status: status || 'approved' // Default to approved if not provided
+            status: status || 'approved', // Default to approved if not provided
+            billImageUrl: req.file ? req.file.location : null
         });
 
         // Generate PDF
@@ -192,14 +203,19 @@ const createTransaction = async (req, res) => {
 const getTransactions = async (req, res) => {
     try {
         const { memberId, type, fieldVisitorId, startDate, endDate, billNumber, branchId: queryBranchId } = req.query;
-        // If logged in, use user's branch. If not (Management IT), use query param or show all/default.
         const userBranchId = req.user?.branchId;
-        const userRole = req.user?.role;
+        const rawRole = req.user?.role || '';
+        const userRole = rawRole.toString().toLowerCase().trim().replace(/_/g, '');
+
+        debugLog(`getTransactions request by User: ${req.user?.userId || req.user?.email}, Role: ${rawRole} (Normalized: ${userRole}), BranchId: ${userBranchId}`);
 
         const query = {};
 
-        // IT Sector and Admin can see all branches. Others are restricted to their own.
-        const isIT = ['it_sector', 'admin', 'it'].includes(userRole);
+        // Normalizing roles for check: it, itsector, admin, analyzer
+        // IT Sector, Admin, and Analyzer can see all branches. Others are restricted to their own.
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer', 'itsector'].includes(userRole);
+
+        debugLog(`Is IT Role: ${isIT}`);
 
         let effectiveBranchId = queryBranchId;
         if (effectiveBranchId && effectiveBranchId !== 'All') {
@@ -215,13 +231,15 @@ const getTransactions = async (req, res) => {
             // Restriction for normal users
             if (userBranchId) {
                 query.branchId = userBranchId;
-            } else if (effectiveBranchId) {
+            } else if (effectiveBranchId && effectiveBranchId !== 'All') {
                 query.branchId = effectiveBranchId;
             }
-        } else if (effectiveBranchId) {
-            // IT can optionally filter by branch
+        } else if (effectiveBranchId && effectiveBranchId !== 'All') {
+            // IT/Analyzer can optionally filter by branch if not set to 'All'
             query.branchId = effectiveBranchId;
         }
+
+        debugLog(`Final Mongoose Query: ${JSON.stringify(query)}`);
 
         if (memberId) query.memberId = memberId;
         if (fieldVisitorId) query.fieldVisitorId = fieldVisitorId;
@@ -251,6 +269,11 @@ const getTransactions = async (req, res) => {
             .populate('memberId', 'name memberId contact branchId')
             .populate('fieldVisitorId', 'fullName userId branchId');
 
+        // Invalidate related caches
+        cacheService.deleteByPattern('dashboard');
+        cacheService.deleteByPattern('fv_dashboard');
+        cacheService.deleteByPattern('manager_dashboard');
+
         res.json({ success: true, count: transactions.length, data: transactions });
     } catch (error) {
         console.error('[getTransactions] Error:', error.message);
@@ -278,8 +301,10 @@ const downloadBill = async (req, res) => {
         }
 
         // Check if user has access to this transaction
-        const branchId = req.user?.branchId || 'default-branch';
-        if (transaction.branchId !== branchId) {
+        const userBranchId = req.user?.branchId || 'default-branch';
+        const isIT = ['it_sector', 'admin', 'it', 'analyzer'].includes(userRole);
+
+        if (!isIT && transaction.branchId !== userBranchId) {
             return res.status(403).json({ success: false, message: 'Access denied to this transaction' });
         }
 

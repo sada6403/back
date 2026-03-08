@@ -1,5 +1,6 @@
 const Member = require('../models/Member');
 const mongoose = require('mongoose');
+const { broadcast, EVENTS } = require('../utils/socketManager');
 
 
 // @desc    Register a member
@@ -29,9 +30,29 @@ const registerMember = async (req, res, next) => {
             }
         }
 
+        // Parse registrationData from string if it came from multipart/form-data
+        let parsedRegistrationData = {};
+        if (registrationData) {
+            try {
+                parsedRegistrationData = typeof registrationData === 'string' ? JSON.parse(registrationData) : registrationData;
+            } catch (e) {
+                console.warn('Could not parse registrationData:', e);
+            }
+        }
+
+        // Attach S3 uploaded file URLs
+        if (req.files) {
+            if (req.files.profileImage && req.files.profileImage[0]) {
+                parsedRegistrationData.profileImageUrl = req.files.profileImage[0].location;
+            }
+            if (req.files.documentPdf && req.files.documentPdf[0]) {
+                parsedRegistrationData.documentPdfUrl = req.files.documentPdf[0].location;
+            }
+        }
+
         // Resolve Field Visitor ID
         let fvId = req.user ? req.user._id : undefined;
-        if (req.body.fieldVisitorId) {
+        if (req.body.fieldVisitorId && req.body.fieldVisitorId !== 'null' && req.body.fieldVisitorId !== '') {
             const inputId = req.body.fieldVisitorId;
             if (mongoose.Types.ObjectId.isValid(inputId)) {
                 fvId = inputId;
@@ -41,9 +62,6 @@ const registerMember = async (req, res, next) => {
                 if (fv) {
                     fvId = fv._id;
                 } else {
-                    // Fallback or error? For now, if code invalid, keep existing logic (maybe undefined or current user)
-                    // But if Manager is adding, they expect it to work.
-                    // Let's log warning
                     console.warn(`Field Visitor with code ${inputId} not found.`);
                 }
             }
@@ -57,7 +75,7 @@ const registerMember = async (req, res, next) => {
             memberId: memberCode || `MEM-${Date.now()}`,
             email,
             nic,
-            registrationData,
+            registrationData: parsedRegistrationData,
             fieldVisitorId: fvId,
             branchId
         });
@@ -66,6 +84,8 @@ const registerMember = async (req, res, next) => {
         const savedMember = await newMember.save();
 
         // Return the saved document immediately
+        broadcast(EVENTS.MEMBER_ADDED, savedMember);
+
         res.status(201).json({
             success: true,
             message: 'Member registered successfully',
@@ -112,173 +132,99 @@ const getMembers = async (req, res) => {
 
         // If no user (unprotected access for Management IT), show all or filter via query
         let matchStage = {};
-
-        /*
-        if (req.user) {
-            matchStage.branchId = branchId;
-            if (role === 'manager') {
-                if (queryFvId) {
-                    matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(queryFvId);
-                }
-            } else {
-                matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(userId);
-            }
-        }
-        */
-        // If unauthenticated, we don't apply any strict filters by default unless passed in query
-        if (queryFvId && !req.user) { // Allow manual filter even if not logged in
+        if (queryFvId && !req.user) {
             matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(queryFvId);
         }
 
         const fs = require('fs');
-        const logMsg = `[getMembers] Time: ${new Date().toISOString()}, Role: ${role}, UserID: ${userId}, Branch: ${branchId}, MatchStage: ${JSON.stringify(matchStage)}\n`;
-        fs.appendFileSync('debug_log.txt', logMsg);
+        const startTime = Date.now();
+        const Member = require('../models/Member');
+        const Transaction = require('../models/Transaction');
+        const FieldVisitor = require('../models/FieldVisitor');
 
-        console.log(`[getMembers] Role: ${role}, Match:`, JSON.stringify(matchStage));
+        const logMsgPrefix = `[getMembers] Starting at ${new Date().toISOString()}, User: ${userId}\n`;
+        fs.appendFileSync('debug_log.txt', logMsgPrefix);
 
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        // Diagnostic: Fetch FieldVisitors first
+        const fvStart = Date.now();
+        const fieldVisitors = await FieldVisitor.find({}).select('userId fullName name').lean();
+        const fvEnd = Date.now();
+        fs.appendFileSync('debug_log.txt', `[getMembers] FieldVisitor fetch took ${fvEnd - fvStart}ms. Count: ${fieldVisitors.length}\n`);
 
-        // Aggregation pipeline
-        const pipeline = [
-            { $match: matchStage },
-            // Lookup transactions
-            {
-                $lookup: {
-                    from: 'transactions',
-                    localField: '_id',
-                    foreignField: 'memberId',
-                    as: 'transactions'
-                }
-            },
-            // Add transaction counts and sums (preserves members without transactions)
-            // FILTER ONLY CURRENT MONTH TRANSACTIONS
-            {
-                $addFields: {
-                    transactionCount: { $size: '$transactions' },
-                    buyTransactions: {
-                        $filter: {
-                            input: '$transactions',
-                            as: 'tx',
-                            cond: {
-                                $and: [
-                                    { $eq: ['$$tx.type', 'buy'] }
-                                ]
-                            }
-                        }
-                    },
-                    sellTransactions: {
-                        $filter: {
-                            input: '$transactions',
-                            as: 'tx',
-                            cond: {
-                                $and: [
-                                    { $eq: ['$$tx.type', 'sell'] }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    totalBuyAmount: { $ifNull: [{ $sum: '$buyTransactions.totalAmount' }, 0] },
-                    totalSellAmount: { $ifNull: [{ $sum: '$sellTransactions.totalAmount' }, 0] },
-                    totalBuyQuantity: { $ifNull: [{ $sum: '$buyTransactions.quantity' }, 0] },
-                    totalSellQuantity: { $ifNull: [{ $sum: '$sellTransactions.quantity' }, 0] }
-                }
-            },
-            // Apply search filter if provided
-            ...(search ? [{
-                $match: {
-                    $or: [
-                        { name: { $regex: search, $options: 'i' } },
-                        { contact: { $regex: search, $options: 'i' } },
-                        { memberId: { $regex: search, $options: 'i' } },
-                        { address: { $regex: search, $options: 'i' } }
-                    ]
-                }
-            }] : []),
-            // Sort by registration date descending
-            { $sort: { registeredAt: -1 } },
-            // Lookup Field Visitor details
-            {
-                $lookup: {
-                    from: 'fieldvisitors',
-                    localField: 'fieldVisitorId',
-                    foreignField: '_id',
-                    as: 'fieldVisitor'
-                }
-            },
-            {
-                $project: {
-                    _id: 1,
-                    name: 1,
-                    contact: { $ifNull: ['$contact', '$mobile', ''] },
-                    mobile: { $ifNull: ['$contact', '$mobile', ''] }, // Alias for compatibility
-                    email: 1,
-                    address: 1,
-                    nic: 1,
-                    memberId: { $ifNull: ['$memberId', '$memberCode', ''] },
-                    memberCode: { $ifNull: ['$memberId', '$memberCode', ''] }, // Alias for compatibility
-                    fieldVisitorId: 1,
-                    fieldVisitorCode: { $arrayElemAt: ['$fieldVisitor.userId', 0] },
-                    fieldVisitorName: {
-                        $let: {
-                            vars: { fv: { $arrayElemAt: ['$fieldVisitor', 0] } },
-                            in: { $ifNull: ['$$fv.fullName', '$$fv.name'] }
-                        }
-                    },
-                    area: 1,
-                    transactionCount: 1,
-                    buyTransactionCount: { $size: '$buyTransactions' },
-                    sellTransactionCount: { $size: '$sellTransactions' },
-                    totalBuyAmount: 1,
-                    totalSellAmount: 1,
-                    totalBuyQuantity: 1,
-                    totalSellQuantity: 1,
-                    registeredAt: 1,
-                    joinedDate: 1,
-                    registrationData: 1
-                }
-            }
-        ];
+        const transStart = Date.now();
+        const transactions = []; // skip fetching all transactions
+        const transEnd = Date.now();
 
-        const members = await Member.aggregate(pipeline);
-        console.log(`[getMembers] Found ${members.length} members with transactions`);
+        const memStart = Date.now();
+        const members = await Member.find(matchStage)
+            .select('name contact mobile email nic address memberId memberCode fieldVisitorId joinedDate registeredAt')
+            .lean();
+        const memEnd = Date.now();
+        const fetchEnd = memEnd;
+        fs.appendFileSync('debug_log.txt', `[getMembers] Member fetch took ${memEnd - memStart}ms. Count: ${members.length}\n`);
 
-        // Format for mobile app with multiple field name options for compatibility
-        const data = members.map(m => ({
-            id: m._id?.toString() || m.id,
-            _id: m._id,
-            name: m.name,
-            full_name: m.name, // Alias for Flutter compatibility
-            mobile: m.mobile,
-            email: m.email || '', // Include email in response
-            address: m.address,
-            postal_address: m.address, // Alias for Flutter compatibility
-            nic: m.nic,
-            member_code: m.memberCode,
-            memberCode: m.memberCode, // Alternative field name
-            fieldVisitorId: m.fieldVisitorCode || m.fieldVisitorId, // Return helper code (FV-...) if avail, else fallback to ObjID
-            fieldVisitorName: m.fieldVisitorName || 'Unknown',
-            area: m.area,
-            transactionCount: m.transactionCount,
-            totalBuyAmount: m.totalBuyAmount || 0,
-            totalSellAmount: m.totalSellAmount || 0,
-            totalBuyQuantity: m.totalBuyQuantity || 0,
-            totalSellQuantity: m.totalSellQuantity || 0,
-            totalBuyQuantity: m.totalBuyQuantity || 0,
-            totalSellQuantity: m.totalSellQuantity || 0,
-            registeredAt: m.joinedDate || m.registeredAt, // Prioritize joinedDate which we know is correct
-            registrationData: m.registrationData || {} // Include registrationData
-        }));
+        // Index transactions and visitors for O(1) lookup
+        const transMap = {};
+        transactions.forEach(tx => {
+            const mId = tx.memberId ? tx.memberId.toString() : 'null';
+            if (!transMap[mId]) transMap[mId] = [];
+            transMap[mId].push(tx);
+        });
 
-        console.log(`[getMembers] Returning ${data.length} formatted members`);
+        const fvMap = {};
+        fieldVisitors.forEach(fv => {
+            fvMap[fv._id.toString()] = fv;
+        });
+
+        // Merge and process fast path
+        let data = members.map(m => {
+            const fv = m.fieldVisitorId ? fvMap[m.fieldVisitorId.toString()] : null;
+
+            return {
+                id: m._id?.toString(),
+                _id: m._id,
+                name: m.name,
+                full_name: m.name,
+                mobile: m.contact || m.mobile || '',
+                email: m.email || '',
+                address: m.address || '',
+                postal_address: m.address || '',
+                nic: m.nic || '',
+                member_code: m.memberId || m.memberCode || '',
+                memberCode: m.memberId || m.memberCode || '',
+                fieldVisitorId: fv?.userId || m.fieldVisitorId?.toString() || '',
+                fieldVisitorName: fv ? (fv.fullName || fv.name) : 'Unknown',
+                area: m.area || '',
+                transactionCount: 0,
+                totalBuyAmount: 0,
+                totalSellAmount: 0,
+                totalBuyQuantity: 0,
+                totalSellQuantity: 0,
+                registeredAt: m.joinedDate || m.registeredAt,
+                registrationAt: m.joinedDate || m.registeredAt,
+                registrationData: m.registrationData || {}
+            };
+        });
+
+        // Apply search filter if provided
+        if (search) {
+            const s = search.toLowerCase();
+            data = data.filter(m =>
+                m.name.toLowerCase().includes(s) ||
+                m.mobile.includes(s) ||
+                m.memberCode.toLowerCase().includes(s)
+            );
+        }
+
+        // Sort by date
+        data.sort((a, b) => new Date(b.registeredAt) - new Date(a.registeredAt));
+
+        const fullEnd = Date.now();
+        fs.appendFileSync('debug_log.txt', `[getMembers] Processing took ${fullEnd - fetchEnd}ms. Total: ${fullEnd - startTime}ms\n`);
+        console.log(`[getMembers] Returning ${data.length} members`);
         res.json({ success: true, count: data.length, data });
     } catch (error) {
-        console.error('[getMembers] Error:', error.message);
+        console.error('[getMembers] Error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to retrieve members',
@@ -305,6 +251,7 @@ const updateMember = async (req, res) => {
             member.registrationData = registrationData || member.registrationData;
 
             const updatedMember = await member.save();
+            broadcast(EVENTS.MEMBER_UPDATED, updatedMember);
             res.json(updatedMember);
         } else {
             res.status(404);
@@ -329,6 +276,7 @@ const deleteMember = async (req, res) => {
             await Transaction.deleteMany({ memberId: member._id });
             // Then delete the member
             await member.deleteOne();
+            broadcast(EVENTS.MEMBER_DELETED, { id: req.params.id });
             res.json({ message: 'Member and their transactions removed' });
         } else {
             res.status(404);
