@@ -17,7 +17,7 @@ const tokenITSector = jwt.sign(
 const makeReq = (token, roleName) => {
     return new Promise((resolve) => {
         const options = {
-            hostname: 'localhost',
+            hostname: '13.48.199.103',
             port: 3001,
             path: '/api/transactions',
             method: 'GET',

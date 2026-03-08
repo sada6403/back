@@ -24,7 +24,7 @@ const token = jwt.sign(
 console.log('Generated Token:', token);
 
 const options = {
-    hostname: 'localhost',
+    hostname: '13.48.199.103',
     port: 3001,
     path: '/api/transactions',
     method: 'GET',

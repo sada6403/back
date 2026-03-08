@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 class ApiConfig {
-  static String baseUrl = 'http://localhost:3001/api';
-  // static String baseUrl = 'http://13.48.199.103:3001/api';
+  // static String baseUrl = 'http://localhost:3001/api';
+  static String baseUrl = 'http://13.48.199.103:3001/api';
   static String get rootUrl => baseUrl.replaceAll('/api', '');
 
   static String get analysis => '/analysis';
