@@ -15,32 +15,56 @@ const protect = async (req, res, next) => {
             console.log('Token decoded:', { id: decoded.id, role: decoded.role });
 
             // Load user by role
+            const userIdToFind = decoded.id;
+            // STRICT hex-24 check to prevent "Cast to ObjectId failed" errors
+            const isValidObjectId = userIdToFind && userIdToFind.length === 24 && /^[0-9a-fA-F]{24}$/.test(userIdToFind);
+
             if (decoded.role === 'manager') {
-                req.user = await BranchManager.findById(decoded.id).select('-password');
+                if (isValidObjectId) {
+                    req.user = await BranchManager.findById(userIdToFind).select('-password');
+                }
                 if (!req.user) {
-                    console.error('Manager not found in DB for ID:', decoded.id);
+                    req.user = await BranchManager.findOne({ userId: userIdToFind }).select('-password');
+                }
+                if (!req.user) {
+                    console.error('Manager not found for ID:', userIdToFind);
                     throw new Error('Manager not found');
                 }
                 req.user.role = 'manager';
             } else if (decoded.role === 'field_visitor') {
-                req.user = await FieldVisitor.findById(decoded.id).select('-password');
+                if (isValidObjectId) {
+                    req.user = await FieldVisitor.findById(userIdToFind).select('-password');
+                }
                 if (!req.user) {
-                    console.error('Field visitor not found in DB for ID:', decoded.id);
+                    req.user = await FieldVisitor.findOne({ userId: userIdToFind }).select('-password');
+                }
+                if (!req.user) {
+                    console.error('Field visitor not found for ID:', userIdToFind);
                     throw new Error('Field visitor not found');
                 }
                 req.user.role = 'field_visitor';
             } else if (decoded.role === 'it_sector' || decoded.role === 'it' || decoded.role === 'admin') {
                 const ITSector = require('../models/ITSector');
-                req.user = await ITSector.findById(decoded.id).select('-password');
+                if (isValidObjectId) {
+                    req.user = await ITSector.findById(userIdToFind).select('-password');
+                }
                 if (!req.user) {
-                    console.error('IT Sector user not found in DB for ID:', decoded.id);
+                    req.user = await ITSector.findOne({ userId: userIdToFind }).select('-password');
+                }
+                if (!req.user) {
+                    console.error('IT Sector user not found for ID:', userIdToFind);
                     throw new Error('IT Sector user not found');
                 }
                 req.user.role = 'it_sector'; // Normalize to 'it_sector' for route authorization
             } else if (decoded.role === 'analyzer') {
-                req.user = await Analyzer.findById(decoded.id).select('-password');
+                if (isValidObjectId) {
+                    req.user = await Analyzer.findById(userIdToFind).select('-password');
+                }
                 if (!req.user) {
-                    console.error('Analyzer not found in DB for ID:', decoded.id);
+                    req.user = await Analyzer.findOne({ userId: userIdToFind }).select('-password');
+                }
+                if (!req.user) {
+                    console.error('Analyzer not found for ID:', userIdToFind);
                     throw new Error('Analyzer not found');
                 }
                 req.user.role = 'analyzer';
@@ -51,7 +75,7 @@ const protect = async (req, res, next) => {
 
             // Attach branchId (prefer token payload, fallback to user document)
             req.user.branchId = decoded.branchId || req.user?.branchId || 'default-branch';
-            console.log('Authenticated user:', req.user.userId || req.user.email);
+            console.log(`[Auth] User: ${req.user.userId || req.user.email}, Role: ${req.user.role}, BranchId: ${req.user.branchId}`);
 
             next();
         } catch (error) {

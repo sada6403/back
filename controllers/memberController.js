@@ -110,172 +110,143 @@ const getMembers = async (req, res) => {
         const userId = req.user?._id;
         const role = req.user?.role;
 
-        // If no user (unprotected access for Management IT), show all or filter via query
-        let matchStage = {};
+        const startTime = Date.now();
+        console.log(`[getMembers] Request by Role: ${role}, UserID: ${userId}, Branch: ${branchId}`);
 
-        /*
-        if (req.user) {
+        // Restore filtering logic
+        let matchStage = {};
+        const isAdmin = (role === 'admin' || role === 'it_sector' || role === 'analyzer');
+
+        if (req.user && !isAdmin) {
             matchStage.branchId = branchId;
-            if (role === 'manager') {
-                if (queryFvId) {
-                    matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(queryFvId);
+            if (role === 'field_visitor') {
+                if (mongoose.Types.ObjectId.isValid(userId)) {
+                    matchStage.fieldVisitorId = new mongoose.Types.ObjectId(userId);
+                } else {
+                    matchStage.fieldVisitorId = userId;
                 }
+            } else if (role === 'manager' && queryFvId) {
+                if (mongoose.Types.ObjectId.isValid(queryFvId)) {
+                    matchStage.fieldVisitorId = new mongoose.Types.ObjectId(queryFvId);
+                } else {
+                    matchStage.fieldVisitorId = queryFvId;
+                }
+            }
+        } else if (queryFvId) {
+            // Admins/IT can filter by FV if provided
+            if (mongoose.Types.ObjectId.isValid(queryFvId)) {
+                matchStage.fieldVisitorId = new mongoose.Types.ObjectId(queryFvId);
             } else {
-                matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(userId);
+                matchStage.fieldVisitorId = queryFvId;
             }
         }
-        */
-        // If unauthenticated, we don't apply any strict filters by default unless passed in query
-        if (queryFvId && !req.user) { // Allow manual filter even if not logged in
-            matchStage.fieldVisitorId = new (require('mongoose')).Types.ObjectId(queryFvId);
+
+        const FieldVisitor = require('../models/FieldVisitor');
+        const Transaction = require('../models/Transaction');
+
+        // 1. Fetch Field Visitors
+        const fieldVisitors = await FieldVisitor.find({}).select('userId fullName name').lean();
+        const fvMap = {};
+        fieldVisitors.forEach(fv => {
+            fvMap[fv._id.toString()] = fv;
+        });
+
+        // 2. Fetch Members
+        const dbMatch = { ...matchStage };
+        if (search) {
+            const s = new RegExp(search, 'i');
+            dbMatch.$or = [
+                { name: s },
+                { contact: s },
+                { mobile: s },
+                { memberId: s },
+                { memberCode: s },
+                { address: s }
+            ];
         }
 
-        const fs = require('fs');
-        const logMsg = `[getMembers] Time: ${new Date().toISOString()}, Role: ${role}, UserID: ${userId}, Branch: ${branchId}, MatchStage: ${JSON.stringify(matchStage)}\n`;
-        fs.appendFileSync('debug_log.txt', logMsg);
+        const members = await Member.find(dbMatch).select('-transactions -registrationData -signatureImage -profileImage -documentPdf').lean().sort({ joinedDate: -1 });
 
-        console.log(`[getMembers] Role: ${role}, Match:`, JSON.stringify(matchStage));
-
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-
-        // Aggregation pipeline
-        const pipeline = [
-            { $match: matchStage },
-            // Lookup transactions
+        // 3. Aggregate Transactions (grouped by memberId) - Optimized
+        const memberIds = members.map(m => m._id);
+        const txStats = await Transaction.aggregate([
             {
-                $lookup: {
-                    from: 'transactions',
-                    localField: '_id',
-                    foreignField: 'memberId',
-                    as: 'transactions'
+                $match: {
+                    memberId: { $in: memberIds }
                 }
             },
-            // Add transaction counts and sums (preserves members without transactions)
-            // FILTER ONLY CURRENT MONTH TRANSACTIONS
             {
-                $addFields: {
-                    transactionCount: { $size: '$transactions' },
-                    buyTransactions: {
-                        $filter: {
-                            input: '$transactions',
-                            as: 'tx',
-                            cond: {
-                                $and: [
-                                    { $eq: ['$$tx.type', 'buy'] }
-                                ]
-                            }
-                        }
+                $group: {
+                    _id: '$memberId',
+                    count: { $sum: 1 },
+                    buyCount: {
+                        $sum: { $cond: [{ $eq: ['$type', 'buy'] }, 1, 0] }
                     },
-                    sellTransactions: {
-                        $filter: {
-                            input: '$transactions',
-                            as: 'tx',
-                            cond: {
-                                $and: [
-                                    { $eq: ['$$tx.type', 'sell'] }
-                                ]
-                            }
-                        }
+                    sellCount: {
+                        $sum: { $cond: [{ $eq: ['$type', 'sell'] }, 1, 0] }
+                    },
+                    totalBuyAmount: {
+                        $sum: { $cond: [{ $eq: ['$type', 'buy'] }, '$totalAmount', 0] }
+                    },
+                    totalSellAmount: {
+                        $sum: { $cond: [{ $eq: ['$type', 'sell'] }, '$totalAmount', 0] }
+                    },
+                    totalBuyQuantity: {
+                        $sum: { $cond: [{ $eq: ['$type', 'buy'] }, '$quantity', 0] }
+                    },
+                    totalSellQuantity: {
+                        $sum: { $cond: [{ $eq: ['$type', 'sell'] }, '$quantity', 0] }
                     }
                 }
-            },
-            {
-                $addFields: {
-                    totalBuyAmount: { $ifNull: [{ $sum: '$buyTransactions.totalAmount' }, 0] },
-                    totalSellAmount: { $ifNull: [{ $sum: '$sellTransactions.totalAmount' }, 0] },
-                    totalBuyQuantity: { $ifNull: [{ $sum: '$buyTransactions.quantity' }, 0] },
-                    totalSellQuantity: { $ifNull: [{ $sum: '$sellTransactions.quantity' }, 0] }
-                }
-            },
-            // Apply search filter if provided
-            ...(search ? [{
-                $match: {
-                    $or: [
-                        { name: { $regex: search, $options: 'i' } },
-                        { contact: { $regex: search, $options: 'i' } },
-                        { memberId: { $regex: search, $options: 'i' } },
-                        { address: { $regex: search, $options: 'i' } }
-                    ]
-                }
-            }] : []),
-            // Sort by registration date descending
-            { $sort: { registeredAt: -1 } },
-            // Lookup Field Visitor details
-            {
-                $lookup: {
-                    from: 'fieldvisitors',
-                    localField: 'fieldVisitorId',
-                    foreignField: '_id',
-                    as: 'fieldVisitor'
-                }
-            },
-            {
-                $project: {
-                    _id: 1,
-                    name: 1,
-                    contact: { $ifNull: ['$contact', '$mobile', ''] },
-                    mobile: { $ifNull: ['$contact', '$mobile', ''] }, // Alias for compatibility
-                    email: 1,
-                    address: 1,
-                    nic: 1,
-                    memberId: { $ifNull: ['$memberId', '$memberCode', ''] },
-                    memberCode: { $ifNull: ['$memberId', '$memberCode', ''] }, // Alias for compatibility
-                    fieldVisitorId: 1,
-                    fieldVisitorCode: { $arrayElemAt: ['$fieldVisitor.userId', 0] },
-                    fieldVisitorName: {
-                        $let: {
-                            vars: { fv: { $arrayElemAt: ['$fieldVisitor', 0] } },
-                            in: { $ifNull: ['$$fv.fullName', '$$fv.name'] }
-                        }
-                    },
-                    area: 1,
-                    transactionCount: 1,
-                    buyTransactionCount: { $size: '$buyTransactions' },
-                    sellTransactionCount: { $size: '$sellTransactions' },
-                    totalBuyAmount: 1,
-                    totalSellAmount: 1,
-                    totalBuyQuantity: 1,
-                    totalSellQuantity: 1,
-                    registeredAt: 1,
-                    joinedDate: 1,
-                    registrationData: 1
-                }
             }
-        ];
+        ]);
 
-        const members = await Member.aggregate(pipeline);
-        console.log(`[getMembers] Found ${members.length} members with transactions`);
+        const txMap = {};
+        txStats.forEach(stat => {
+            if (stat._id) {
+                txMap[stat._id.toString()] = stat;
+            }
+        });
 
-        // Format for mobile app with multiple field name options for compatibility
-        const data = members.map(m => ({
-            id: m._id?.toString() || m.id,
-            _id: m._id,
-            name: m.name,
-            full_name: m.name, // Alias for Flutter compatibility
-            mobile: m.mobile,
-            email: m.email || '', // Include email in response
-            address: m.address,
-            postal_address: m.address, // Alias for Flutter compatibility
-            nic: m.nic,
-            member_code: m.memberCode,
-            memberCode: m.memberCode, // Alternative field name
-            fieldVisitorId: m.fieldVisitorCode || m.fieldVisitorId, // Return helper code (FV-...) if avail, else fallback to ObjID
-            fieldVisitorName: m.fieldVisitorName || 'Unknown',
-            area: m.area,
-            transactionCount: m.transactionCount,
-            totalBuyAmount: m.totalBuyAmount || 0,
-            totalSellAmount: m.totalSellAmount || 0,
-            totalBuyQuantity: m.totalBuyQuantity || 0,
-            totalSellQuantity: m.totalSellQuantity || 0,
-            totalBuyQuantity: m.totalBuyQuantity || 0,
-            totalSellQuantity: m.totalSellQuantity || 0,
-            registeredAt: m.joinedDate || m.registeredAt, // Prioritize joinedDate which we know is correct
-            registrationData: m.registrationData || {} // Include registrationData
-        }));
+        // 4. Merge and map
+        const data = members.map(m => {
+            const fv = m.fieldVisitorId ? fvMap[m.fieldVisitorId.toString()] : null;
+            const tx = txMap[m._id.toString()] || {
+                count: 0, buyCount: 0, sellCount: 0,
+                totalBuyAmount: 0, totalSellAmount: 0,
+                totalBuyQuantity: 0, totalSellQuantity: 0
+            };
 
-        console.log(`[getMembers] Returning ${data.length} formatted members`);
+            return {
+                id: m._id?.toString() || m.id,
+                _id: m._id,
+                name: m.name,
+                full_name: m.name,
+                mobile: m.contact || m.mobile || '',
+                email: m.email || '',
+                address: m.address || '',
+                postal_address: m.address || '',
+                nic: m.nic || '',
+                member_code: m.memberId || m.memberCode || '',
+                memberCode: m.memberId || m.memberCode || '',
+                fieldVisitorId: fv?.userId || m.fieldVisitorId?.toString() || '',
+                fieldVisitorName: fv ? (fv.fullName || fv.name) : 'Unknown',
+                area: m.area || '',
+                transactionCount: tx.count,
+                buyTransactionCount: tx.buyCount,
+                sellTransactionCount: tx.sellCount,
+                totalBuyAmount: tx.totalBuyAmount,
+                totalSellAmount: tx.totalSellAmount,
+                totalBuyQuantity: tx.totalBuyQuantity,
+                totalSellQuantity: tx.totalSellQuantity,
+                registeredAt: m.joinedDate || m.registeredAt,
+                joinedDate: m.joinedDate || m.registeredAt,
+                registrationData: m.registrationData || {}
+            };
+        });
+
+        const duration = Date.now() - startTime;
+        console.log(`[getMembers] Returning ${data.length} members. Duration: ${duration}ms`);
         res.json({ success: true, count: data.length, data });
     } catch (error) {
         console.error('[getMembers] Error:', error.message);

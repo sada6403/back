@@ -88,32 +88,55 @@ const Analyzer = require('../models/Analyzer');
 
 // GET all employees (Aggregated from sub-collections)
 router.get('/', async (req, res) => {
+    const startTime = Date.now();
     try {
         const [managers, fieldVisitors, branchManagers, itSectors, analyzers, employees] = await Promise.all([
-            Manager.find(),
-            FieldVisitor.find(),
-            BranchManager.find(),
-            ITSector.find(),
-            Analyzer.find(),
-            Employee.find() // Keep original too just in case
+            Manager.find().select('-profileImage -password').lean(),
+            FieldVisitor.find().select('-profileImage -password').lean(),
+            BranchManager.find().select('-profileImage -password').lean(),
+            ITSector.find().select('-profileImage -password').lean(),
+            Analyzer.find().select('-profileImage -password').lean(),
+            Employee.find().select('-profileImage -password').lean()
         ]);
 
-        console.log(`[Employees] Fetched: ${managers.length} Managers, ${fieldVisitors.length} FVs, ${analyzers.length} Analyzers`);
+        const fetchEnd = Date.now();
 
-        // Return structured data as expected by Backend EmployeeService
+        // Compute Leads Count for Field Visitors using DB-side aggregation
+        const Member = require('../models/Member');
+        const leadsStats = await Member.aggregate([
+            { $match: { memberId: /^L-/ } },
+            { $group: { _id: "$fieldVisitorId", count: { $sum: 1 } } }
+        ]).hint({ memberId: 1 });
+
+        const leadsMap = {};
+        leadsStats.forEach(stat => {
+            if (stat._id) {
+                leadsMap[stat._id.toString()] = stat.count;
+            }
+        });
+
+        const fieldVisitorsWithLeads = fieldVisitors.map(fv => ({
+            ...fv,
+            leadsCount: leadsMap[fv._id.toString()] || 0
+        }));
+
+        const fullEnd = Date.now();
+        console.log(`[Employees] Total time: ${fullEnd - startTime}ms. Counts: M:${managers.length}, FV:${fieldVisitors.length}, BM:${branchManagers.length}`);
+
         res.json({
             success: true,
             data: {
                 managers,
-                fieldVisitors,
+                fieldVisitors: fieldVisitorsWithLeads,
                 branchManagers,
                 itSectors,
-                analyzers: analyzers, // Added
+                analyzers,
                 employees
             }
         });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        console.error('[Employees] Error:', err.message);
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
