@@ -469,4 +469,105 @@ const importMembers = async (req, res) => {
     }
 };
 
-module.exports = { registerMember, getMembers, updateMember, deleteMember, importMembers };
+// @desc    Get member statistics for dashboard
+// @route   GET /api/members/stats
+// @access  Private
+const getMemberStats = async (req, res) => {
+    try {
+        const branchId = req.user?.branchId;
+        const role = req.user?.role;
+        const userId = req.user?._id;
+
+        const startTime = Date.now();
+        const isAdmin = (role === 'admin' || role === 'it_sector' || role === 'analyzer');
+
+        const matchStage = {};
+        if (req.user && !isAdmin) {
+            matchStage.branchId = branchId;
+            if (role === 'field_visitor') {
+                if (mongoose.Types.ObjectId.isValid(userId)) {
+                    matchStage.fieldVisitorId = new mongoose.Types.ObjectId(userId);
+                } else {
+                    matchStage.fieldVisitorId = userId;
+                }
+            }
+        }
+
+        // 1. Get Total Count
+        const totalCount = await Member.countDocuments(matchStage);
+
+        // 2. Get Monthly New Members (Last 12 months)
+        const now = new Date();
+        const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+        const monthlyStats = await Member.aggregate([
+            {
+                $match: {
+                    ...matchStage,
+                    joinedDate: { $gte: twelveMonthsAgo }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        year: { $year: "$joinedDate" },
+                        month: { $month: "$joinedDate" }
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id.year": 1, "_id.month": 1 } }
+        ]);
+
+        // Format chart data (series)
+        const series = Array(12).fill(0);
+        monthlyStats.forEach(stat => {
+            const statDate = new Date(stat._id.year, stat._id.month - 1, 1);
+            let diff = (now.getFullYear() - statDate.getFullYear()) * 12 + (now.getMonth() - statDate.getMonth());
+            let index = 11 - diff;
+            if (index >= 0 && index < 12) {
+                series[index] = stat.count;
+            }
+        });
+
+        const duration = Date.now() - startTime;
+        console.log(`[getMemberStats] Complete in ${duration}ms. Count: ${totalCount}`);
+
+        res.json({
+            success: true,
+            data: {
+                totalCount,
+                series
+            }
+        });
+    } catch (error) {
+        console.error('[getMemberStats] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+// @desc    Get single member
+// @route   GET /api/members/:id
+// @access  Private
+const getMember = async (req, res) => {
+    try {
+        const member = await Member.findById(req.params.id).lean();
+        if (!member) {
+            return res.status(404).json({ success: false, message: 'Member not found' });
+        }
+        res.json({ success: true, data: member });
+    } catch (error) {
+        console.error('[getMember] Error:', error.message);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
+module.exports = {
+    registerMember,
+    getMembers,
+    getMember,
+    getMemberStats,
+    updateMember,
+    deleteMember,
+    importMembers
+};
