@@ -20,7 +20,10 @@ const protect = async (req, res, next) => {
 
             // Load user by role
             const userIdToFind = decoded.id;
-            const isValidObjectId = mongoose.Types.ObjectId.isValid(userIdToFind);
+            // STRICT hex-24 check to prevent "Cast to ObjectId failed" errors
+            const isValidObjectId = userIdToFind && userIdToFind.length === 24 && /^[0-9a-fA-F]{24}$/.test(userIdToFind);
+
+            log(`Checking user: ${userIdToFind} (valid_oid=${isValidObjectId})`);
 
             if (decoded.role === 'manager') {
                 if (isValidObjectId) {
