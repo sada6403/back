@@ -513,6 +513,14 @@ const getTransactionStats = async (req, res) => {
     }
 };
 
+const queryEcho = (req, res) => {
+    res.json({
+        query: req.query,
+        user: req.user ? { id: req.user._id, role: req.user.role, branchId: req.user.branchId } : null,
+        url: req.originalUrl
+    });
+};
+
 module.exports = {
     createTransaction,
     getTransactions,
