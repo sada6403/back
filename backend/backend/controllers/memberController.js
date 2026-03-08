@@ -169,7 +169,7 @@ const getMemberStats = async (req, res) => {
             }
         });
 
-        log(`Stats fetched in ${Date.now() - statsStartTime}ms. Total: ${totalCount}`);
+        console.log(`[getMemberStats] Complete in ${Date.now() - startTime}ms. Count: ${totalCount}`);
 
         res.json({
             success: true,
@@ -351,7 +351,7 @@ const getMembers = async (req, res) => {
         data.sort((a, b) => new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0));
 
         const fullEnd = Date.now();
-        log(`Returning ${data.length} formatted members. Total time: ${fullEnd - startTime}ms`);
+        console.log(`[getMembers] Returning ${data.length} formatted members. Total time: ${fullEnd - startTime}ms`);
         res.json({ success: true, count: data.length, data });
     } catch (error) {
         console.error('[getMembers] Error:', error.message);

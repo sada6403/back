@@ -103,7 +103,7 @@ router.get('/', async (req, res) => {
         ]);
 
         const fetchEnd = Date.now();
-        // console.log(`[Employees] Promise.all took ${fetchEnd - startTime}ms. Counts: M:${managers.length}, FV:${fieldVisitors.length}, BM:${branchManagers.length}\n`);
+        console.log(`[Employees] Promise.all took ${fetchEnd - startTime}ms. Counts: M:${managers.length}, FV:${fieldVisitors.length}, BM:${branchManagers.length}`);
 
         // Compute Leads Count for Field Visitors
         // We only fetch leads once and map them in memory to avoid many small queries or slow regex aggregations.
@@ -138,9 +138,7 @@ router.get('/', async (req, res) => {
         }));
 
         const fullEnd = Date.now();
-        // console.log(`[Employees] Formatting and cleanup took ${fullEnd - fetchEnd}ms. Total: ${fullEnd - startTime}ms\n`);
-
-        console.log(`[Employees] Fetched: ${managers.length} Managers, ${fieldVisitors.length} FVs, ${analyzers.length} Analyzers`);
+        console.log(`[Employees] Total time: ${fullEnd - startTime}ms. Fetched: ${managers.length} Managers, ${fieldVisitors.length} FVs, ${analyzers.length} Analyzers`);
 
         // Return structured data as expected by Backend EmployeeService
         res.json({
